@@ -1,0 +1,243 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f5f7fb;
+  color: #1f2937;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  padding: 24px;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.brand {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.subtitle {
+  margin: 8px 0 24px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.nav {
+  display: grid;
+  gap: 10px;
+}
+
+.nav-link {
+  padding: 12px 14px;
+  border-radius: 10px;
+  color: #cbd5e1;
+  text-decoration: none;
+  background: transparent;
+}
+
+.nav-link.active {
+  background: #1e293b;
+  color: #ffffff;
+}
+
+.content {
+  padding: 32px;
+}
+
+.metrics-grid,
+.ai-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.metric-card,
+.ai-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.metric-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.metric-label {
+  margin-top: 8px;
+  color: #64748b;
+}
+
+.page-status {
+  margin-top: 20px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #64748b;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.page-error {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.data-table {
+  width: 100%;
+  margin-top: 20px;
+  border-collapse: collapse;
+  background: #ffffff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.data-table th,
+.data-table td {
+  padding: 14px 16px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.data-table th {
+  background: #f8fafc;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.grounding-panel {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.grounding-header {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.grounding-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.grounding-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.grounding-badge-grounded {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.grounding-badge-retrieved {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.grounding-badge-empty {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.grounding-badge-failed {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.grounding-badge-neutral {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.grounding-meta {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.grounding-error {
+  margin: 0 0 12px;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.grounding-details {
+  margin-top: 8px;
+}
+
+.grounding-empty {
+  margin: 12px 0 0;
+  color: #64748b;
+}
+
+.citation-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.citation-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #ffffff;
+}
+
+.citation-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.citation-id {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.citation-title {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.citation-meta {
+  color: #64748b;
+  font-size: 13px;
+  margin-top: 4px;
+}
