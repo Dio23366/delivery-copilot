@@ -5,9 +5,16 @@ AI-powered enterprise delivery and issue management platform with grounded RAG, 
 Delivery Copilot is a portfolio project for Forward Deployed Engineers, Solutions Engineers, Implementation Engineers, Technical Product Managers, and enterprise delivery teams.
 It is not a generic chatbot and not a simple CRUD demo.
 
-![Grounded RAG Analysis #68](docs/screenshots/analysis-68-grounded-rag.png)
+![Delivery Copilot completed Agent Investigation](docs/screenshots/agent-investigation-completed.png)
 
-The screenshot shows Analysis #68 using `gpt-5.5` with `Grounded with Knowledge`, one business-facing citation, Document #3, and the API Authentication Troubleshooting Guide / Enterprise API Integration Runbook evidence trail.
+The screenshot shows a completed bounded Agent Run with 18 persisted Steps, 3 approved read-only Tool calls, structured Analysis generation, final Human Review, and an auditable execution timeline. It is a separate operator demonstration from the 21-step Human Clarification acceptance scenario documented below.
+
+<details>
+<summary>View the complete Agent execution timeline</summary>
+
+![Complete Agent execution timeline](docs/screenshots/agent-investigation-full-timeline.png)
+
+</details>
 
 `gpt-5.5` is the model recorded in the accepted E2E evidence. The example configuration in `.env.example` and `compose.yaml` defaults to the configurable `gpt-4.1-mini`; operators can select another compatible model through environment configuration.
 
@@ -44,6 +51,12 @@ AI outputs are only useful when they include sources, auditability, and a human 
 - prompt injection boundary for untrusted evidence
 - grounded prompt version `issue_summarizer_v4_grounded`
 - frontend citation display
+
+#### Grounded RAG evidence example
+
+![Grounded RAG Analysis #68](docs/screenshots/analysis-68-grounded-rag.png)
+
+The screenshot shows Analysis #68 using `gpt-5.5` with `Grounded with Knowledge`, one business-facing citation, Document #3, and the API Authentication Troubleshooting Guide / Enterprise API Integration Runbook evidence trail.
 
 ### Agent MVP and LangGraph orchestration foundation
 - Persisted `AgentRun`, `AgentStep`, and `AgentToolCall` audit records
@@ -220,6 +233,9 @@ The structured output is validated with Pydantic / JSON contract checks and then
 - `POST /api/agent/runs/{run_id}/cancel`
 
 ## Local Development
+
+For complete Windows PowerShell startup and shutdown instructions, see [STARTUP_GUIDE.md](STARTUP_GUIDE.md).
+
 1. Copy `.env.example` to `.env`.
 2. Configure required environment variables without exposing real keys.
    - Real-time LLM generation defaults to `AI_LLM_TIMEOUT_SECONDS=120.0`.
