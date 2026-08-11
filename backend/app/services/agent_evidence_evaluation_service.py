@@ -18,6 +18,12 @@ AGENT_EVIDENCE_EVALUATION_VERSION = (
     "agent_evidence_evaluation_v0.1"
 )
 
+# The demo favors precision over recall: weak semantic matches must not be
+# treated as grounded evidence for a delivery recommendation. They instead
+# consume the remaining controlled Tool budget and ultimately route to Human
+# Clarification when no stronger evidence is available.
+MIN_USABLE_KNOWLEDGE_SIMILARITY = 0.65
+
 GENERATE_ANALYSIS_NODE = "generate_analysis"
 SELECT_TOOL_NODE = "select_tool"
 REQUEST_CLARIFICATION_NODE = (
@@ -699,7 +705,10 @@ class AgentEvidenceEvaluationService:
             or similarity > 1
         ):
             return False
-        return similarity >= 0.60
+        return (
+            similarity
+            >= MIN_USABLE_KNOWLEDGE_SIMILARITY
+        )
 
     @staticmethod
     def _history_is_usable(

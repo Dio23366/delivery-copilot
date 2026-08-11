@@ -6,7 +6,11 @@ from typing import Any
 
 
 AGENT_INVESTIGATION_ROUTING_VERSION = "agent_investigation_routing_v0.1"
-DEFAULT_MAX_STEPS = 16
+# Covers the longest frozen happy path: triage, three bounded read-only Tool
+# calls, one Human Clarification round, Analysis persistence, and the final
+# Human Review interrupt. Tool and clarification counts remain independently
+# bounded.
+DEFAULT_MAX_STEPS = 20
 DEFAULT_MAX_TOOL_CALLS = 3
 
 NEXT_NODE_SELECT_TOOL = "select_tool"

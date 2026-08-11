@@ -1,4 +1,6 @@
 import type {
+  AgentRun,
+  AgentRunResumePayload,
   AIEvaluationMetricsResponse,
   AIFeedbackPayload,
   AIAnalysisHistoryItem,
@@ -107,4 +109,19 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   getAIEvaluationMetrics: () => fetchJson<AIEvaluationMetricsResponse>('/ai/evaluation/metrics'),
+  createAgentRun: (issueId: number) =>
+    fetchJson<AgentRun>('/agent/runs', {
+      method: 'POST',
+      body: JSON.stringify({ issue_id: issueId }),
+    }),
+  getAgentRun: (runId: string) => fetchJson<AgentRun>(`/agent/runs/${runId}`),
+  resumeAgentRun: (runId: string, payload: AgentRunResumePayload) =>
+    fetchJson<AgentRun>(`/agent/runs/${runId}/resume`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  cancelAgentRun: (runId: string) =>
+    fetchJson<AgentRun>(`/agent/runs/${runId}/cancel`, {
+      method: 'POST',
+    }),
 };

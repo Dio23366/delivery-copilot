@@ -102,7 +102,10 @@ def issue_context() -> dict[str, object]:
     }
 
 
-def knowledge_output() -> AgentSearchKnowledgeOutput:
+def knowledge_output(
+    *,
+    similarity_score: float = 0.8,
+) -> AgentSearchKnowledgeOutput:
     evidence = AgentKnowledgeEvidence(
         citation_id="K1",
         rank=1,
@@ -116,8 +119,8 @@ def knowledge_output() -> AgentSearchKnowledgeOutput:
         source_uri=None,
         chunk_index=0,
         chunk_text="Validate the token endpoint and client credentials.",
-        distance=0.2,
-        similarity_score=0.8,
+        distance=1 - similarity_score,
+        similarity_score=similarity_score,
     )
     citation = AgentKnowledgeCitation(
         citation_id="K1",
@@ -132,7 +135,7 @@ def knowledge_output() -> AgentSearchKnowledgeOutput:
         source_uri=None,
         chunk_index=0,
         chunk_text="Validate the token endpoint and client credentials.",
-        similarity_score=0.8,
+        similarity_score=similarity_score,
     )
     return AgentSearchKnowledgeOutput(
         retrieval_status="succeeded",
@@ -381,6 +384,44 @@ def test_clarification_only_is_supported() -> None:
     supplemental = provider.contexts[0].supplemental_evidence
     assert len(supplemental) == 1
     assert supplemental[0].evidence_type == "human_clarification"
+
+
+def test_weak_knowledge_is_excluded_after_clarification() -> None:
+    state = base_state()
+    weak_output = knowledge_output(
+        similarity_score=0.6089305644590269,
+    )
+    state["tool_results"][0]["result_json"] = (
+        weak_output.model_dump(mode="json")
+    )
+    state["retrieved_evidence"] = [
+        evidence_envelope(
+            "search_knowledge",
+            "search-1",
+            "knowledge_chunk",
+            weak_output.knowledge_evidence[0].model_dump(
+                mode="json"
+            ),
+        )
+    ]
+    state["clarification_response"] = (
+        "The timeout is reproducible on /api/v1/sync after 30 seconds."
+    )
+    generator, provider = service()
+
+    outcome = generator.generate(state)
+
+    context = provider.contexts[0]
+    assert context.knowledge_evidence == ()
+    assert tuple(
+        item.evidence_type
+        for item in context.supplemental_evidence
+    ) == ("human_clarification",)
+    generated = outcome.to_state_update()[
+        GENERATED_ANALYSIS_STATE_KEY
+    ]
+    assert generated["retrieval_status"] == "no_results"
+    assert generated["knowledge_citations"] == []
 
 
 def test_fallback_provider_metadata_is_controlled() -> None:
@@ -656,6 +697,7 @@ def main() -> None:
         test_happy_path_uses_all_evidence_types,
         test_history_only_maps_to_supplemental_evidence,
         test_clarification_only_is_supported,
+        test_weak_knowledge_is_excluded_after_clarification,
         test_fallback_provider_metadata_is_controlled,
         test_rejected_history_is_not_in_prompt,
         test_non_mapping_state_is_rejected,

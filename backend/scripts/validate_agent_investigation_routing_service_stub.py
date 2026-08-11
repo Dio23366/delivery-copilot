@@ -54,7 +54,7 @@ def main() -> None:
         == "agent_investigation_routing_v0.1",
         "routing version mismatch",
     )
-    require(DEFAULT_MAX_STEPS == 16, "max steps mismatch")
+    require(DEFAULT_MAX_STEPS == 20, "max steps mismatch")
     require(DEFAULT_MAX_TOOL_CALLS == 3, "max tool calls mismatch")
     print("PASS: frozen routing version and defaults")
     passed += 1

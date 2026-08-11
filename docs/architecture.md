@@ -2,6 +2,12 @@
 
 ## 1. Purpose and Scope
 This document describes the system that has already been implemented, run, and accepted in the current repository state.
+
+- Status: As-built
+- Baseline commit: `7c3b1a8`
+- Runtime acceptance date: `2026-08-10`
+- Source of truth: checked-out source, migrations, validators, and runtime acceptance evidence
+
 Delivery Copilot is an AI-powered enterprise delivery and issue management platform.
 It is not a generic chatbot.
 It is not a simple CRUD demo.
@@ -21,6 +27,19 @@ Customer
 Customer, Project, Requirement, and Issue provide the operational context for delivery work.
 Issue is the entry point for Grounded RAG analysis.
 Human Review is the final business closure step.
+
+The operator-visible Agent workflow is:
+
+Issue selection
+→ Start or reuse Agent Run
+→ Confirm triage
+→ Bounded read-only investigation
+→ Optional Human Clarification
+→ Structured Analysis generation
+→ Final Human Review
+→ Completed auditable Run
+
+The `/agent-runs` frontend renders this workflow but does not own Agent state transitions. The FastAPI backend, orchestration services, and persistence layer remain authoritative.
 
 ### Agent MVP and validated LangGraph foundation
 
@@ -46,6 +65,8 @@ The LangGraph foundation includes typed state, compiled topology, read-only adap
 ```mermaid
 flowchart LR
   FE[React + TypeScript Frontend] --> API[FastAPI API Layer]
+  FE --> AUI[Agent Investigation UI]
+  AUI --> API
   API --> CS[Customer Service]
   API --> PS[Project Service]
   API --> RS[Requirement Service]
@@ -53,6 +74,7 @@ flowchart LR
   API --> GAS[Grounded Analysis Service]
   API --> HS[Analysis History]
   API --> HF[Human Feedback]
+  API --> AR[AgentRunnerService]
 
   GAS --> KI[Knowledge Ingestion]
   KI --> EP[Embedding Provider]
@@ -64,6 +86,8 @@ flowchart LR
   IS --> PG
   HS --> PG
   HF --> PG
+  AR --> PG
+  AR --> GAS
   GAS --> PGV[(pgvector)]
   GAS --> LLM[LLM Provider]
   LLM -. failure .-> RBF[Rule-based Fallback]
@@ -76,6 +100,7 @@ PostgreSQL stores business data, knowledge data, analysis logs, and citation sna
 pgvector handles similarity retrieval.
 LLM failure degrades to rule-based fallback.
 Human feedback is written back to the Analysis Log.
+Agent Run, Step, and Tool Call state is persisted in PostgreSQL and rendered through the Agent Investigation UI.
 
 ## 4. Grounded RAG Request Sequence
 
@@ -202,6 +227,8 @@ Analysis #68 contains only the clean business-facing Document #3 evidence path.
 
 ## 9. Human-in-the-loop State Machine
 
+### Analysis review
+
 ```mermaid
 stateDiagram-v2
   [*] --> pending
@@ -220,10 +247,29 @@ Edited output is stored separately.
 The original AI output remains unchanged.
 `feedback_note` is optional and trimmed.
 
+### Agent investigation
+
+The Agent workflow adds explicit waiting boundaries before investigation and before business closure:
+
+```mermaid
+stateDiagram-v2
+  [*] --> triage_wait
+  triage_wait --> investigate: confirm triage
+  investigate --> clarification_wait: evidence insufficient
+  clarification_wait --> investigate: submit clarification
+  investigate --> final_review_wait: analysis persisted
+  final_review_wait --> completed: human review
+  investigate --> terminal: cancel, failure, or limit
+```
+
+The Runner persists each transition as Agent Run, Step, and optional nested Tool Call records. Resume continues the same Run from a backend-owned boundary. Final review coordinates the linked Analysis and Agent Run in one controlled transaction.
+
 ## 10. Frontend Evidence Layer
 The frontend displays a Grounded Badge, Retrieval Status, Prompt Version, Citation Count, Document Title, Document ID, Doc Type, Scope, Source Kind, Source Name, and Similarity Score.
-It does not display `retrieval_query`, `chunk_text`, `source_uri`, credentials, or provider endpoints.
+The Agent Investigation page additionally displays Run control data, Human Gates, generated Analysis, the persisted Step timeline, nested Tool Calls, and controlled Agent state.
+It recursively hides `retrieval_query`, `chunk_text`, `source_uri`, credentials, secret-like fields, and provider endpoints from browser-rendered Tool arguments, Tool results, Step snapshots, and Agent state.
 Current Analysis and Analysis History use the same Evidence Renderer, which avoids field loss and presentation drift.
+The Agent UI submits human input and renders backend responses; it does not infer or persist lifecycle transitions locally.
 
 ## 11. Failure Handling
 The system explicitly handles missing Issue / Project / Customer records, invalid request schema, missing embedding configuration, embedding provider failure, no retrieval results, malformed retrieval response, LLM timeout, malformed LLM JSON, rule-based fallback, persistence transaction safety, duplicate feedback finalization, Agent step/tool-call limits, timeout and cancellation, idempotent resume, human waiting boundaries, and checkpoint identity mismatch classification.
@@ -273,12 +319,17 @@ The deployment is a local Docker Compose runtime, not a public cloud deployment.
 | Accepted E2E evidence model | `gpt-5.5` |
 | Configurable example default | `gpt-4.1-mini` in `.env.example` and `compose.yaml` |
 | Agent MVP evidence | Persisted lifecycle, bounded execution, tool, clarification, analysis, and final-review validators |
+| Agent Demo UI | Start/reuse, triage, clarification, generated Analysis, final review, audit timeline, refresh, and cancellation accepted locally |
+| Evidence guardrail | Shared `0.65` demo boundary for evidence evaluation and generation filtering |
+| Browser redaction | Query, chunk, source URI, and secret-like fields hidden recursively in Agent views |
 | LangGraph foundation | State, topology, adapters, Driver, Coordinator, and Runner injection validated |
 | Runner injection boundary | `AgentRunnerService` stores the Coordinator but does not invoke it |
 | Public validation | Checked-in documentation and Agent/LangGraph validators |
 
 - [Portfolio README](../README.md)
 - [Grounded RAG acceptance report](grounded-rag-acceptance.md)
+- [Agent Demo UI frozen scope](agent/agent-demo-ui-scope.md)
+- [Agent Demo runtime acceptance](agent/agent-demo-acceptance.md)
 - [Analysis #67 evidence snapshot](evidence/grounded-rag-analysis-67.json)
 - [Final Grounded Analysis screenshot](screenshots/analysis-68-grounded-rag.png)
 
@@ -286,6 +337,7 @@ The deployment is a local Docker Compose runtime, not a public cloud deployment.
 Knowledge Evidence is treated as untrusted data.
 Credentials are environment configuration, not persisted in public documentation.
 Retrieval query and raw chunk text are not exposed in the UI.
+Agent Tool arguments, Tool results, Step snapshots, and controlled state pass through recursive browser redaction.
 No authentication or RBAC is implemented.
 This is a local portfolio runtime, not a production multi-tenant deployment.
 Provider calls leave the local Docker environment and reach configured external endpoints.
@@ -298,6 +350,7 @@ Grounded RAG has been accepted on one primary real business scenario.
 No dedicated Grounded RAG evaluation dashboard exists.
 Runtime demo records are local database state.
 The frontend is functional but not a mature design system.
+The Agent Investigation UI is an operator-facing local demo, not a production operations console.
 The architecture has not been load-tested for production-scale concurrency.
 The validated LangGraph foundation has not taken over the production Runner execution path.
 Persistent production checkpoint storage and automated DB/Checkpoint reconciliation are not included.

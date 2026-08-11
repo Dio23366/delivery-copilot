@@ -29,6 +29,9 @@ from app.services.agent_tool_registry import (
     GET_ANALYSIS_HISTORY_TOOL,
     SEARCH_KNOWLEDGE_TOOL,
 )
+from app.services.agent_evidence_evaluation_service import (
+    MIN_USABLE_KNOWLEDGE_SIMILARITY,
+)
 
 
 AGENT_ANALYSIS_GENERATION_VERSION = (
@@ -417,11 +420,36 @@ class AgentAnalysisGenerationService:
                 ),
             )
 
+        usable_evidence = tuple(
+            item
+            for item in evidence
+            if item.similarity_score
+            >= MIN_USABLE_KNOWLEDGE_SIMILARITY
+        )
+        usable_citation_ids = {
+            item.citation_id
+            for item in usable_evidence
+        }
+        usable_citations = tuple(
+            item
+            for item in citations
+            if item.citation_id
+            in usable_citation_ids
+            and item.similarity_score
+            >= MIN_USABLE_KNOWLEDGE_SIMILARITY
+        )
+        effective_retrieval_status = (
+            "no_results"
+            if output.retrieval_status == "succeeded"
+            and not usable_evidence
+            else output.retrieval_status
+        )
+
         return (
-            output.retrieval_status,
+            effective_retrieval_status,
             output.retrieval_query,
-            evidence,
-            citations,
+            usable_evidence,
+            usable_citations,
             output.retrieval_error_code,
         )
 

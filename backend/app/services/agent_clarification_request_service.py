@@ -217,27 +217,48 @@ class AgentClarificationRequestService:
         cls,
         state: Mapping[str, Any],
     ) -> dict[str, str]:
+        persisted_context = state.get(
+            "issue_context"
+        )
+        if persisted_context is None:
+            # Retain the original flat-state contract for older persisted
+            # Runs and focused service callers.
+            context_source = state
+        elif not isinstance(
+            persisted_context,
+            Mapping,
+        ):
+            raise AgentClarificationRequestError(
+                error_code="invalid_issue_context",
+                message=(
+                    "Persisted issue_context must be a "
+                    "mapping."
+                ),
+            )
+        else:
+            context_source = persisted_context
+
         context = {
             "issue_title": cls._optional_text(
-                state.get("issue_title")
+                context_source.get("issue_title")
             ),
             "issue_description": cls._optional_text(
-                state.get("issue_description")
+                context_source.get("issue_description")
             ),
             "issue_type": cls._optional_text(
-                state.get("issue_type")
+                context_source.get("issue_type")
             ),
             "severity": cls._optional_text(
-                state.get("severity")
+                context_source.get("severity")
             ),
             "status": cls._optional_text(
-                state.get("status")
+                context_source.get("status")
             ),
             "project_name": cls._optional_text(
-                state.get("project_name")
+                context_source.get("project_name")
             ),
             "delivery_stage": cls._optional_text(
-                state.get("delivery_stage")
+                context_source.get("delivery_stage")
             ),
         }
 
@@ -278,13 +299,30 @@ class AgentClarificationRequestService:
         if any(
             token in searchable
             for token in (
+                "timeout",
+                "timed out",
+                "latency",
+                "slow response",
+            )
+        ):
+            return (
+                f"For {issue_reference}, please provide "
+                "the affected endpoint or operation, the "
+                "configured timeout duration, one failure "
+                "timestamp with its original error or "
+                "correlation ID, and whether the timeout "
+                "can be reproduced on demand."
+            )
+
+        if any(
+            token in searchable
+            for token in (
                 "auth",
                 "token",
                 "credential",
                 "permission",
                 "401",
                 "403",
-                "api",
             )
         ):
             return (

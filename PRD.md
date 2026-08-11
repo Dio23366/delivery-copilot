@@ -4,6 +4,11 @@
 
 This document describes the implemented portfolio state of Delivery Copilot.
 
+- Status: As-built
+- Baseline commit: `7c3b1a8`
+- Runtime acceptance date: `2026-08-10`
+- Source of truth: checked-out source, database migrations, validators, and runtime acceptance evidence
+
 It is an **as-built specification**, not a promise that every idea from the original product vision is implemented. Historical planning remains in:
 
 - `docs/product/prd-v0.1-original-vision.md`
@@ -316,6 +321,7 @@ The React frontend implements routes for:
 - Issues
 - AI Copilot
 - AI Evaluation
+- Agent Investigation
 
 The Issues page is the main AI workflow surface. It supports:
 
@@ -328,7 +334,17 @@ The Issues page is the main AI workflow surface. It supports:
 - history browsing;
 - accept, reject, and edit-and-accept feedback.
 
-The current frontend does not expose a dedicated Agent lifecycle UI or knowledge-administration UI.
+The dedicated `/agent-runs` Agent Investigation page supports:
+
+- selecting an existing Issue and starting or reusing its active Agent Run;
+- Run status, current node, counters, waiting state, errors, refresh, and cancellation;
+- triage confirmation or correction followed by controlled resume;
+- focused Human Clarification and resume when approved evidence is insufficient;
+- generated Analysis presentation and final Human Review;
+- a persisted Step timeline with nested Tool Calls;
+- controlled Agent state presentation with retrieval queries, chunk text, source URIs, and secret-like fields hidden from the browser.
+
+The frontend submits human decisions and renders backend-owned state. It does not infer or persist Agent transitions locally. A dedicated knowledge-administration UI is not implemented.
 
 ## 11. Provider and Failure Behavior
 
@@ -379,6 +395,12 @@ The portfolio contains accepted evidence for:
 - guarded tool execution;
 - clarification and final-review waits;
 - analysis persistence;
+- an operator-facing Agent Investigation UI;
+- triage, clarification, and final-review Human Gates;
+- persisted Step and Tool Call timeline rendering;
+- recursive browser redaction for controlled Agent state and Tool snapshots;
+- conservative evidence routing and generation filtering at the accepted demo boundary;
+- normal and recovery cancellation;
 - LangGraph foundation and Runner constructor injection.
 
 These demonstrate implementation and engineering acceptance. They do not establish production SLA, business ROI, security certification, or formal model accuracy.
@@ -392,8 +414,8 @@ The current product does not include:
 - comments or activity feeds;
 - a report/export module;
 - a project-detail route;
-- a dedicated Agent frontend;
 - a dedicated knowledge-management frontend;
+- free-form Agent tool registration or autonomous write actions;
 - public cloud deployment;
 - CI/CD;
 - distributed task workers;
@@ -410,3 +432,5 @@ Delivery Copilot is a local, evidence-driven portfolio implementation.
 The honest public claim is:
 
 > Delivery Copilot implements an enterprise delivery workflow with persisted Grounded RAG analysis, citation snapshots, human review, evaluation metrics, and a bounded single-agent investigation MVP, together with a validated LangGraph orchestration foundation that has not replaced the production Runner.
+
+The accepted Agent MVP is operator-visible through the Agent Investigation UI. It remains a local portfolio demonstration, not a production-grade autonomous Agent platform.

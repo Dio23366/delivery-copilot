@@ -13,6 +13,7 @@ from app.services.agent_evidence_evaluation_service import (
     AGENT_EVIDENCE_EVALUATION_VERSION,
     GENERATE_ANALYSIS_NODE,
     LIMIT_EXCEEDED_NODE,
+    MIN_USABLE_KNOWLEDGE_SIMILARITY,
     REQUEST_CLARIFICATION_NODE,
     SELECT_TOOL_NODE,
     AgentEvidenceEvaluationDecision,
@@ -177,6 +178,54 @@ def test_usable_knowledge_generates_analysis() -> None:
     assert decision.evidence_sufficient is True
     assert decision.knowledge_evidence_count == 1
     print("PASS: usable knowledge generates analysis")
+
+
+def test_knowledge_similarity_boundary_is_conservative() -> None:
+    assert MIN_USABLE_KNOWLEDGE_SIMILARITY == 0.65
+
+    weak_state = base_state()
+    weak_state["tool_results"] = all_tool_results()
+    weak_state["retrieved_evidence"] = [
+        evidence(
+            tool_name=SEARCH_KNOWLEDGE_TOOL,
+            marker="a",
+            evidence_type="knowledge_chunk",
+            payload={
+                "chunk_text": "Weak semantic match.",
+                "similarity_score": 0.649999,
+            },
+        )
+    ]
+    weak_decision = (
+        AgentEvidenceEvaluationService()
+        .evaluate(weak_state)
+    )
+    assert weak_decision.next_node == (
+        REQUEST_CLARIFICATION_NODE
+    )
+    assert weak_decision.evidence_sufficient is False
+
+    boundary_state = base_state()
+    boundary_state["retrieved_evidence"] = [
+        evidence(
+            tool_name=SEARCH_KNOWLEDGE_TOOL,
+            marker="a",
+            evidence_type="knowledge_chunk",
+            payload={
+                "chunk_text": "Accepted boundary match.",
+                "similarity_score": 0.65,
+            },
+        )
+    ]
+    boundary_decision = (
+        AgentEvidenceEvaluationService()
+        .evaluate(boundary_state)
+    )
+    assert boundary_decision.next_node == (
+        GENERATE_ANALYSIS_NODE
+    )
+    assert boundary_decision.evidence_sufficient is True
+    print("PASS: knowledge similarity boundary is conservative")
 
 
 def test_accepted_history_generates_analysis() -> None:
@@ -590,6 +639,7 @@ def main() -> None:
     tests = (
         test_version_and_nodes_are_frozen,
         test_usable_knowledge_generates_analysis,
+        test_knowledge_similarity_boundary_is_conservative,
         test_accepted_history_generates_analysis,
         test_rejected_history_selects_another_tool,
         test_risk_only_selects_another_tool,
@@ -612,7 +662,7 @@ def main() -> None:
 
     print(
         "Agent Evidence Evaluation assertions "
-        "passed (17/17)"
+        "passed (18/18)"
     )
 
 
