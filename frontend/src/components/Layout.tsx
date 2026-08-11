@@ -8,6 +8,7 @@ const navItems = [
   { to: '/issues', label: 'Issues' },
   { to: '/ai-copilot', label: 'AI Copilot' },
   { to: '/ai-evaluation', label: 'AI Evaluation' },
+  { to: '/agent-runs', label: 'Agent Investigation' },
 ];
 
 export function Layout() {

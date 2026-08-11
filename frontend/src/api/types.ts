@@ -208,3 +208,112 @@ export interface AIEvaluationMetricsResponse {
   provider_breakdown: AIEvaluationMetricGroup[];
   prompt_version_breakdown: AIEvaluationPromptVersionGroup[];
 }
+
+export type AgentRunStatus =
+  | 'created'
+  | 'running'
+  | 'waiting_for_triage_confirmation'
+  | 'waiting_for_clarification'
+  | 'generating_analysis'
+  | 'waiting_for_final_review'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'limit_exceeded';
+
+export interface AgentTriageResult {
+  issue_type: 'API' | 'Data' | 'Deployment' | 'Configuration' | 'Integration';
+  subtype: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  confidence: number;
+  reason: string;
+}
+
+export interface AgentGeneratedAnalysis {
+  analysis_type?: string;
+  provider?: 'llm' | 'rule_based_fallback';
+  model_name?: string | null;
+  prompt_version?: string | null;
+  issue_summary?: string;
+  possible_root_cause?: string;
+  recommended_actions?: string[];
+  customer_update_draft?: string;
+  risk_level?: string;
+  project_impact?: string;
+  retrieval_status?: RetrievalStatus;
+  retrieval_query?: string | null;
+  knowledge_citations?: KnowledgeCitation[];
+  retrieval_error_code?: string | null;
+}
+
+export interface AgentRunState extends Record<string, unknown> {
+  triage_suggestion?: AgentTriageResult;
+  triage_result?: AgentTriageResult;
+  triage_confirmed?: boolean;
+  evidence_sufficient?: boolean;
+  evidence_reason?: string;
+  clarification_question?: string;
+  clarification_response?: string | null;
+  generated_analysis?: AgentGeneratedAnalysis;
+}
+
+export interface AgentToolCall {
+  id: number;
+  tool_call_index: number;
+  tool_name: string;
+  tool_version?: string | null;
+  call_status: string;
+  arguments: Record<string, unknown>;
+  result?: Record<string, unknown> | null;
+  read_only: boolean;
+  requires_approval: boolean;
+  timeout_seconds: number;
+  error_code?: string | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface AgentStep {
+  id: number;
+  step_index: number;
+  node_name: string;
+  step_status: string;
+  input_state?: Record<string, unknown> | null;
+  output_state?: Record<string, unknown> | null;
+  error_code?: string | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  tool_calls: AgentToolCall[];
+}
+
+export interface AgentRun {
+  id: number;
+  run_id: string;
+  issue_id: number;
+  analysis_log_id?: number | null;
+  graph_version: string;
+  current_node: string;
+  run_status: AgentRunStatus;
+  step_count: number;
+  tool_call_count: number;
+  retry_count: number;
+  state: AgentRunState;
+  waiting_since?: string | null;
+  resume_node?: string | null;
+  error_code?: string | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  steps: AgentStep[];
+}
+
+export interface AgentRunResumePayload {
+  triage_result?: AgentTriageResult;
+  clarification_response?: string;
+}

@@ -7,6 +7,7 @@ import { Requirements } from './pages/Requirements';
 import { Issues } from './pages/Issues';
 import { AICopilot } from './pages/AICopilot';
 import { AIEvaluation } from './pages/AIEvaluation';
+import { AgentRuns } from './pages/AgentRuns';
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/issues" element={<Issues />} />
         <Route path="/ai-copilot" element={<AICopilot />} />
         <Route path="/ai-evaluation" element={<AIEvaluation />} />
+        <Route path="/agent-runs" element={<AgentRuns />} />
       </Route>
     </Routes>
   );

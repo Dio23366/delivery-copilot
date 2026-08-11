@@ -126,6 +126,59 @@ def test_authentication_question_is_focused() -> None:
     print("PASS: authentication question is focused")
 
 
+def test_persisted_timeout_context_is_focused() -> None:
+    state = base_state()
+    context_fields = (
+        "issue_title",
+        "issue_description",
+        "issue_type",
+        "severity",
+        "status",
+        "project_name",
+        "delivery_stage",
+    )
+    state.update(
+        {
+            "issue_context": {
+                **{
+                    field: state.pop(field)
+                    for field in context_fields
+                },
+                "issue_id": 17,
+                "owner": "Engineering Team",
+                "risk_level": "high",
+                "customer_name": "Northwind Health",
+                "customer_industry": "Healthcare",
+            }
+        }
+    )
+    state["issue_context"]["issue_title"] = (
+        "API timeout during sync"
+    )
+    state["issue_context"]["issue_description"] = (
+        "The integration API times out during nightly sync jobs."
+    )
+
+    request = create(state)
+
+    assert "affected endpoint or operation" in (
+        request.clarification_question
+    )
+    assert "configured timeout duration" in (
+        request.clarification_question
+    )
+    assert "correlation ID" in (
+        request.clarification_question
+    )
+    assert "reproduced on demand" in (
+        request.clarification_question
+    )
+    assert "authentication method" not in (
+        request.clarification_question
+    )
+    print("PASS: persisted timeout context is focused")
+
+
 def test_deployment_question_is_focused() -> None:
     state = base_state()
     state.update(
@@ -498,6 +551,7 @@ def main() -> None:
     tests = (
         test_version_and_wait_contract_are_frozen,
         test_authentication_question_is_focused,
+        test_persisted_timeout_context_is_focused,
         test_deployment_question_is_focused,
         test_data_question_is_focused,
         test_customer_wait_question_is_focused,
@@ -522,7 +576,7 @@ def main() -> None:
 
     print(
         "Agent Clarification Request assertions "
-        "passed (19/19)"
+        "passed (20/20)"
     )
 
 

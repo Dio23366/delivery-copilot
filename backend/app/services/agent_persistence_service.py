@@ -2767,7 +2767,6 @@ class AgentPersistenceService:
         }
         inconsistent_step_statuses = {
             'interrupted',
-            'failed',
             'cancelled',
         }
 
@@ -2849,6 +2848,17 @@ class AgentPersistenceService:
                 if active_tool_call_indices:
                     raise ValueError(
                         'Completed Agent step contains an '
+                        'active tool call: '
+                        f'run_id={run_id}, '
+                        f'step_index={agent_step.step_index}',
+                    )
+            elif agent_step.step_status == 'failed':
+                # Recovery cancellation deliberately preserves the failed
+                # Step and its error payload as immutable audit evidence. A
+                # failed Step must not, however, leave a Tool call active.
+                if active_tool_call_indices:
+                    raise ValueError(
+                        'Failed Agent step contains an '
                         'active tool call: '
                         f'run_id={run_id}, '
                         f'step_index={agent_step.step_index}',

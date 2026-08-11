@@ -28,6 +28,8 @@ AI outputs are only useful when they include sources, auditability, and a human 
 - AI Issue Summarizer
 - Analysis History
 - Human-in-the-loop feedback: `accepted` / `rejected` / `edited_and_accepted`
+- Operator-facing Agent Investigation UI with triage, clarification, final
+  review, cancellation, and persisted execution timeline
 
 ### Grounded RAG
 - Manual knowledge ingestion
@@ -48,6 +50,13 @@ AI outputs are only useful when they include sources, auditability, and a human 
 - Controlled single-agent workflow for triage, human confirmation, tool selection, evidence evaluation, clarification, analysis persistence, and final review
 - Three approved read-only investigation tools with guarded execution and replay-aware result reuse
 - Bounded execution with finite step/tool-call limits, timeout, cancellation, safe failure, and resume behavior
+- Conservative Agent evidence guardrail (`0.65` similarity in the accepted
+  demo baseline): below-threshold chunks remain auditable but are excluded from
+  generation prompts and Citation Snapshots
+- Focused Human Clarification when the approved read-only Tool budget is
+  exhausted without sufficient evidence
+- Operator UI for Run control, Human Gates, generated Analysis, and persisted
+  Step / ToolCall inspection with sensitive state fields redacted
 - Validated LangGraph typed state, compiled topology, nodes, routing, adapters, single-step Driver, checkpoint identity classification, and the `AgentGraphStepCoordinator` foundation
 - Constructor injection of the Coordinator into `AgentRunnerService` without changing existing production Runner behavior
 - Explicit boundary: the production Runner does not yet call the Coordinator; persistent production Checkpointer, DB/Checkpoint reconciliation, and full orchestration takeover remain roadmap items
@@ -109,8 +118,31 @@ Analysis #67 is the pre-archive acceptance record, while Analysis #68 is the cle
 Smoke Test Document #4 was archived after acceptance.
 Historical Citation Snapshots were not rewritten.
 
+This Grounded RAG acceptance is separate from the Agent Demo acceptance. The
+Agent workflow applies its own conservative `0.65` evidence guardrail; the
+historical #68 record is not rewritten.
+
 - [Grounded RAG acceptance report](docs/grounded-rag-acceptance.md)
 - [Analysis #67 evidence snapshot](docs/evidence/grounded-rag-analysis-67.json)
+
+## Agent Demo Runtime Acceptance
+
+The operator-facing Agent workflow was exercised locally against the real
+Docker Compose backend on 2026-08-10.
+
+| Scenario | Verified result |
+| --- | --- |
+| Triage Human Gate | persisted interrupt and resume |
+| Approved Tools | 3 read-only Tool calls, auditable in the timeline |
+| Weak RAG evidence | `0.6089` rejected by the `0.65` Agent guardrail |
+| Human Clarification | focused API-timeout question and persisted response |
+| Post-clarification generation | 20 Steps to Final Review; `Retrieval: no_results` |
+| Final completion | 21 Steps, 3 Tool calls, 0 retries |
+| Cancellation | normal waiting cancellation and failed-Step recovery cancellation |
+| UI security boundary | retrieval query, chunk text, source URI, and secret-like values redacted |
+
+The accepted runtime path is documented in the
+[Agent Demo acceptance report](docs/agent/agent-demo-acceptance.md).
 
 ## Structured AI Output
 The AI issue summarizer returns a strict six-field JSON contract:
@@ -166,6 +198,10 @@ The structured output is validated with Pydantic / JSON contract checks and then
 9. Agent persistence and business transactions remain owned by existing services rather than Graph nodes.
 10. LangGraph is introduced through a Driver and Coordinator seam instead of replacing the production Runner in one migration.
 11. Portfolio claims distinguish a validated orchestration foundation from full production takeover.
+12. Below-threshold Agent evidence remains in audit records but is excluded from
+    generation and Citation Snapshots.
+13. Human-review form state resets between Analysis records so a prior decision
+    cannot be carried into a new Run silently.
 
 ## API Highlights
 - `GET /health`
@@ -178,6 +214,10 @@ The structured output is validated with Pydantic / JSON contract checks and then
 - `GET /api/ai/issues/{issue_id}/analyses`
 - `PATCH /api/ai/analyses/{analysis_id}/feedback`
 - `GET /api/ai/evaluation/metrics`
+- `POST /api/agent/runs`
+- `GET /api/agent/runs/{run_id}`
+- `POST /api/agent/runs/{run_id}/resume`
+- `POST /api/agent/runs/{run_id}/cancel`
 
 ## Local Development
 1. Copy `.env.example` to `.env`.
@@ -196,6 +236,7 @@ npm run dev
 ```
 
 7. Frontend URL: `http://localhost:5173`
+8. Agent Investigation UI: `http://localhost:5173/agent-runs`
 
 If `npm.ps1` is blocked by PowerShell execution policy, use `npm.cmd`.
 
@@ -206,6 +247,8 @@ If `npm.ps1` is blocked by PowerShell execution policy, use `npm.cmd`.
 - [Analysis #67 evidence snapshot](docs/evidence/grounded-rag-analysis-67.json)
 - [Agent MVP scope and as-built overlay](docs/agent/agent-mvp-scope.md)
 - [Agent state and graph design with as-built overlay](docs/agent/agent-state-and-graph.md)
+- [Agent Demo UI frozen scope](docs/agent/agent-demo-ui-scope.md)
+- [Agent Demo runtime acceptance](docs/agent/agent-demo-acceptance.md)
 - `backend/scripts/validate_portfolio_readme.py`
 - `backend/scripts/validate_as_built_prd.py`
 - `backend/scripts/validate_architecture_doc.py`
@@ -220,6 +263,8 @@ The fresh public repository uses file-based evidence and checked-in validators r
 - The frontend focuses on evidence visibility rather than full design-system polish.
 - A dedicated Grounded RAG evaluation dashboard is not yet implemented.
 - Runtime demo records are local database state and require seeded or recreated data.
+- The Agent similarity guardrail is a conservative demo baseline and requires a
+  representative evaluation set before production calibration.
 - The validated LangGraph foundation has not taken over the production Runner execution path.
 - A persistent production Checkpointer and automated DB/Checkpoint reconciliation are not included in this portfolio scope.
 
