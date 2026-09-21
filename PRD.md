@@ -2,126 +2,110 @@
 
 ## 1. Document Status
 
-This document describes the implemented portfolio state of Delivery Copilot.
+This is the current **as-built specification** for the public Delivery Copilot repository. It describes implemented behavior, accepted evidence, and explicit limits. It is not a future-state wishlist and does not imply production deployment.
 
-- Status: As-built
-- Baseline commit: `7c3b1a8`
-- Runtime acceptance date: `2026-08-10`
-- Source of truth: checked-out source, database migrations, validators, and runtime acceptance evidence
+The product currently contains:
 
-It is an **as-built specification**, not a promise that every idea from the original product vision is implemented. Historical planning remains in:
+- an enterprise delivery workflow;
+- persisted Grounded RAG issue analysis;
+- Human review and analysis history;
+- a persisted, bounded single-agent investigation workflow;
+- an operator-facing Agent Investigation UI;
+- a validated LangGraph orchestration foundation that has not replaced the current Runner.
 
-- `docs/product/prd-v0.1-original-vision.md`
-- `docs/product/prd-change-summary.md`
-
-The current source of truth is the code, database migrations, accepted validators, and the public-facing architecture documents.
+This documentation refresh clarifies the runtime authority boundary. It does not add runtime functionality.
 
 ## 2. Product Summary
 
-Delivery Copilot is an AI-assisted enterprise delivery and issue-management platform.
+Delivery Copilot helps enterprise delivery teams organize Customer, Project, Requirement, Issue, and knowledge context, then use AI to investigate delivery issues with evidence and human control.
 
-It combines:
+The implemented AI product has two complementary execution paths:
 
-- customer, project, requirement, and issue tracking;
-- dashboard risk metrics;
-- persisted Grounded RAG issue analysis;
-- knowledge-document ingestion, chunking, embeddings, and scoped retrieval;
-- structured AI output and immutable citation snapshots;
-- human review and AI evaluation metrics;
-- a persisted, bounded single-agent investigation workflow;
-- a validated LangGraph orchestration foundation.
+1. **Persisted Grounded RAG analysis** for evidence-backed structured issue analysis.
+2. **Bounded Agent investigation** for multi-step triage, controlled Tool use, evidence evaluation, optional clarification, resume, analysis generation, and final Human Review.
 
-The product is designed for delivery, implementation, support, solutions, and forward-deployed engineering workflows where operational context, evidence, and human accountability matter more than free-form chat.
+The product is designed around a simple principle: AI output is not treated as useful merely because a model generated it. Evidence, state, failure behavior, and Human review are part of the product contract.
 
 ## 3. Product Goals
 
-The implemented product aims to:
+The implemented product goals are to:
 
-1. centralize the core delivery entities and their current state;
-2. surface operational risk through deterministic metrics;
-3. generate reviewable issue analysis grounded in managed knowledge;
-4. preserve provider, prompt, retrieval, citation, and review evidence;
-5. degrade safely when retrieval or model providers fail;
-6. support a resumable and auditable Agent MVP with explicit human boundaries;
-7. demonstrate an incremental LangGraph migration seam without overstating production adoption.
+- centralize delivery context across Customer, Project, Requirement, and Issue records;
+- reduce manual synthesis for issue investigation and customer communication;
+- produce structured, reviewable AI analysis rather than free-form opaque text;
+- ground factual analysis in retrievable Knowledge where evidence exists;
+- preserve a Citation Snapshot so historical evidence is auditable;
+- allow a bounded Agent to investigate with approved read-only tools;
+- persist Agent execution so operators can inspect Run / Step / Tool Call history;
+- interrupt for human input when evidence or business confirmation is required;
+- fail or degrade safely when external AI dependencies are unavailable.
 
 ## 4. Target Users
 
-Primary users:
+Primary portfolio user types are:
 
-- Delivery Manager
-- Implementation Engineer
-- Solutions Engineer
-- Forward Deployed Engineer
-- Technical Product Manager
-- Support or escalation engineer
+- enterprise delivery / implementation engineers;
+- project and delivery managers;
+- technical account / solutions roles;
+- operators who investigate blockers and prepare customer updates;
+- AI Product / Technical Product stakeholders evaluating evidence-backed workflows.
 
-The portfolio runtime does not implement login, user accounts, or role-based access control. User roles are product context, not enforced authorization identities.
+This repository does not implement user accounts, tenancy, or role-based permission management.
 
 ## 5. Implemented Product Surface
 
 ### 5.1 Operational records
 
-The application implements list, create, and controlled status/update operations for:
+Implemented business entities include:
 
-- Customers
-- Projects
-- Requirements
-- Issues
+- Customer
+- Project
+- Requirement
+- Issue
+- Knowledge documents and chunks
 
-Implemented relationships:
-
-```text
-Customer
-└── Project
-    ├── Requirement
-    └── Issue
-        ├── AI Analysis History
-        └── Agent Run
-```
+The frontend supports basic create/list/update workflows for the operational entities that are present in the public implementation.
 
 ### 5.2 Dashboard
 
-The dashboard returns and displays:
+The Dashboard exposes operational metrics including active Customers, active Projects, open Issues, critical Issues, overdue Requirements, and Projects at risk.
 
-- active customers;
-- active projects;
-- open issues;
-- critical issues;
-- overdue requirements;
-- projects at risk.
+The current Dashboard is intentionally compact and does not claim mature BI, forecasting, or executive reporting.
 
 ### 5.3 Knowledge base
 
-The knowledge subsystem implements:
+The backend supports:
 
-- global, customer, and project document scopes;
-- document creation and listing;
-- deterministic chunk creation;
-- single-chunk embedding;
-- document-level batch embedding;
-- 1536-dimensional vector persistence;
-- scoped Top-K similarity search;
-- document readiness and archive states.
+- manual Knowledge document ingestion;
+- chunk persistence;
+- single and batch embedding;
+- safe retry / failed-chunk isolation;
+- `text-embedding-v4`;
+- 1536-dimensional embeddings;
+- PostgreSQL + pgvector storage;
+- global / Customer / Project retrieval scope;
+- ready/archive lifecycle behavior.
+
+A dedicated knowledge-administration frontend is not implemented.
 
 ### 5.4 Grounded RAG analysis
 
-For a persisted Issue, the application can:
+For an Issue, the persisted Grounded RAG workflow can:
 
-1. load Issue, Project, and Customer context;
-2. build a retrieval query;
+1. load Issue / Project / Customer context;
+2. build a deterministic retrieval query;
 3. resolve permitted knowledge scope;
-4. generate a query embedding;
-5. retrieve relevant chunks through pgvector;
-6. treat retrieved text as untrusted evidence;
-7. build a grounded prompt;
+4. embed the query;
+5. retrieve Top-K candidates through pgvector cosine similarity;
+6. treat retrieved Knowledge as untrusted evidence;
+7. build the `issue_summarizer_v4_grounded` prompt;
 8. call the configured LLM provider;
-9. validate a six-field structured result;
-10. fall back to a rule-based provider when required;
-11. persist analysis metadata and citation snapshots;
-12. expose the result for human review.
+9. validate a strict structured result;
+10. use rule-based fallback when provider execution cannot be trusted;
+11. persist provider, model, Prompt Version, retrieval status, and Citation Snapshot;
+12. expose the Analysis for Human review.
 
-The six-field output contract is:
+The six-field structured contract is:
 
 - `issue_summary`
 - `possible_root_cause`
@@ -132,7 +116,7 @@ The six-field output contract is:
 
 ### 5.5 Human review
 
-Each persisted analysis starts with `feedback_status = pending`.
+Each persisted Analysis begins with `feedback_status = pending`.
 
 A reviewer may finalize it as:
 
@@ -140,63 +124,53 @@ A reviewer may finalize it as:
 - `rejected`
 - `edited_and_accepted`
 
-`edited_and_accepted` requires a nonblank `edited_output`.
-
-The original AI-generated content remains separate from the human-edited output. A finalized analysis cannot be finalized a second time.
+`edited_and_accepted` requires nonblank edited output. Original AI content remains separate from human-edited content, and a finalized Analysis cannot be finalized a second time.
 
 ### 5.6 AI evaluation
 
-The AI Evaluation view aggregates:
+The AI Evaluation view aggregates workflow-review outcomes such as total Analyses, pending/reviewed counts, positive outcome rate, direct acceptance rate, edit-and-accept rate, rejection rate, provider/model breakdown, and Prompt Version breakdown.
 
-- total analyses;
-- pending and reviewed counts;
-- positive outcome rate;
-- direct acceptance rate;
-- edit-and-accept rate;
-- rejection rate;
-- provider/model breakdown;
-- prompt-version breakdown.
-
-These are workflow review metrics. They are not a formal model-accuracy benchmark.
+These metrics describe Human review outcomes. They are not a formal model-accuracy benchmark.
 
 ## 6. Agent MVP
 
 ### 6.1 Implemented lifecycle
 
-The persisted Agent MVP supports:
+The current Agent runtime supports:
 
-- run creation and active-run reuse for one Issue;
-- Issue context loading;
-- validated triage suggestions;
-- triage confirmation wait;
-- deterministic investigation routing;
-- bounded read-only tool selection and execution;
-- evidence evaluation;
-- clarification wait and resume;
-- analysis generation;
-- atomic analysis persistence;
-- final-review wait;
-- finalization through the existing analysis feedback endpoint;
-- cancellation;
-- terminal limit handling;
-- Run, Step, and Tool Call audit records.
+- active-Run reuse for one Issue;
+- deterministic Issue context loading;
+- validated triage suggestion;
+- Triage Human Gate;
+- bounded investigation routing;
+- approved read-only Tool selection and execution;
+- Tool result persistence and replay-aware reuse;
+- explicit evidence evaluation;
+- optional Human Clarification;
+- same-Run resume from persisted waiting state;
+- structured Analysis generation;
+- AIAnalysisLog persistence;
+- final-review waiting;
+- Human Review closure;
+- cancellation and recovery cancellation;
+- terminal `failed`, `cancelled`, and `limit_exceeded` outcomes;
+- persisted Run, Step, and Tool Call audit records.
 
 ### 6.2 Approved tools
 
-The Agent tool registry includes:
+The current dynamic Agent Tool Registry contains exactly three approved read-only Tools:
 
-- `load_issue_context`
 - `search_knowledge`
 - `get_analysis_history`
 - `calculate_delivery_risk`
 
-The first tool is deterministic context loading. The investigation loop may select among the remaining three according to confirmed triage, prior results, clarification, and configured limits.
+The historical design used the capability name `load_issue_context` as a starting Tool concept. In the current implementation, context loading is deterministic and handled before dynamic Tool selection by the Runner/service path; it is not registered as a fourth dynamic Tool.
 
-The initial tools are read-only and do not own database commits.
+All current dynamic Tools are read-only and do not own arbitrary database commits.
 
 ### 6.3 Run statuses
 
-Implemented Agent Run statuses:
+Implemented Agent Run statuses include:
 
 - `created`
 - `running`
@@ -209,59 +183,63 @@ Implemented Agent Run statuses:
 - `cancelled`
 - `limit_exceeded`
 
-Human rejection of an analysis still closes an auditable workflow as `completed`; it is not a technical failure.
+Human rejection still closes an auditable business workflow as `completed`; it is not a technical failure.
 
 ### 6.4 Safety boundaries
 
-The Agent MVP is bounded by persisted counters and service-owned transition rules.
+The Agent runtime is bounded by persisted counters, allowlisted Tools, state validation, and service-owned transitions.
 
-Important boundaries include:
+Implemented boundaries include:
 
-- finite steps, tool calls, retries, and timeouts;
-- schema validation for triage and tool input/output;
-- no arbitrary tool execution;
-- no write tools in the initial registry;
+- finite `max_steps` and `max_tool_calls`;
+- bounded transitions per Runner call;
+- Tool timeouts;
+- schema validation for triage and Tool contracts;
+- no arbitrary Tool execution;
+- no write Tools in the current registry;
 - explicit waiting states for human input;
-- transaction ownership in orchestration and persistence services;
-- lock ordering through the persistence layer;
-- no SQLAlchemy Session, ORM object, provider client, credential, or exception object in serialized Agent state.
+- loop-stall detection;
+- state/node consistency checks;
+- replay-aware Tool-call identity handling;
+- transaction ownership in orchestration/persistence services;
+- row locking for critical state transitions;
+- no Session, ORM object, provider client, credential, raw HTTP response, or exception object in serialized Agent state.
 
 ## 7. LangGraph Foundation
 
-The repository includes a validated LangGraph orchestration foundation:
+The repository contains a validated LangGraph orchestration foundation:
 
 - typed Agent state;
 - compiled graph topology;
-- node and routing adapters;
+- graph nodes and conditional routing;
 - read-only adapters;
-- an `execute_tool` runtime adapter;
-- a single-step Driver;
+- `execute_tool` adapter;
+- single-step Driver;
 - checkpoint identity classification;
 - `AgentGraphStepCoordinator`;
 - constructor injection into `AgentRunnerService`.
 
-This is an incremental migration seam.
+The current production business path remains owned by `AgentRunnerService`. **The Runner stores the injected Coordinator but does not invoke it.**
 
-The current production business path remains owned by `AgentRunnerService`. The Runner stores the injected Coordinator but does not invoke it.
-
-The portfolio does **not** claim:
+Therefore this repository does not claim:
 
 - full production Runner takeover by LangGraph;
-- a persistent production Checkpointer deployment;
+- persistent production Checkpointer deployment;
 - automatic database/checkpoint reconciliation;
-- distributed workers;
-- multi-agent orchestration;
-- autonomous enterprise write actions.
+- distributed LangGraph workers;
+- multi-agent orchestration.
+
+The migration strategy is incremental: validate the seam first, then consider takeover only when the runtime and recovery model justify it.
 
 ## 8. Implemented API Workflows
 
 ### 8.1 Operational workflow
 
 ```text
-Create or review Customer
+Create / review Customer
 → create Project
 → create Requirements and Issues
-→ update operational statuses
+→ update operational status
 → inspect Dashboard metrics
 ```
 
@@ -270,10 +248,10 @@ Create or review Customer
 ```text
 Issue
 → POST persisted analysis
-→ retrieval and provider execution
-→ AIAnalysisLog + citation snapshot
-→ analysis history
-→ human feedback
+→ retrieval + provider execution
+→ AIAnalysisLog + Citation Snapshot
+→ history
+→ Human review
 → evaluation metrics
 ```
 
@@ -281,21 +259,24 @@ Issue
 
 ```text
 POST Agent Run
-→ run to triage wait
+→ deterministic context load
+→ triage wait
 → resume with triage confirmation
 → bounded investigation
 → optional clarification wait/resume
-→ persist analysis
+→ persist Analysis
 → final-review wait
-→ PATCH analysis feedback
+→ PATCH Analysis feedback
 → completed Agent Run
 ```
 
+The public Agent API includes create, read, resume, and cancel endpoints. Invalid state transitions are rejected rather than silently restarting the workflow.
+
 ## 9. Persistence Requirements
 
-The PostgreSQL schema is managed through Alembic revisions `0001` through `0007`.
+The accepted runtime uses PostgreSQL and Alembic migrations through `0007_agent_run_terminal`.
 
-The current as-built database contains ten application tables:
+Application persistence includes:
 
 - `customers`
 - `projects`
@@ -308,11 +289,15 @@ The current as-built database contains ten application tables:
 - `agent_steps`
 - `agent_tool_calls`
 
-PostgreSQL uses JSONB for structured Agent state and pgvector for 1536-dimensional embeddings. SQLite-compatible variants are used by isolated validators where appropriate; the accepted runtime database is PostgreSQL.
+PostgreSQL JSONB stores controlled Agent state. pgvector stores 1536-dimensional embeddings.
+
+Critical Agent persistence operations use row locks to coordinate current Run / Step / Tool Call / linked Analysis transitions. Agent creation locks the Issue row before active-Run reuse is decided.
+
+Historical Citation Snapshots are immutable even when a Knowledge document is later archived.
 
 ## 10. Frontend Requirements
 
-The React frontend implements routes for:
+The React frontend implements:
 
 - Dashboard
 - Customers
@@ -323,114 +308,126 @@ The React frontend implements routes for:
 - AI Evaluation
 - Agent Investigation
 
-The Issues page is the main AI workflow surface. It supports:
+The Issues page supports persisted Grounded RAG analysis, provider/model metadata, retrieval status, Grounded badge, citations, structured fields, history, and Human review.
 
-- issue creation and status updates;
-- persisted issue analysis;
-- provider and model display;
-- retrieval-status and grounded badges;
-- citation metadata;
-- structured analysis fields;
-- history browsing;
-- accept, reject, and edit-and-accept feedback.
+The `/agent-runs` page supports:
 
-The dedicated `/agent-runs` Agent Investigation page supports:
-
-- selecting an existing Issue and starting or reusing its active Agent Run;
+- selecting an Issue and starting/reusing its active Agent Run;
 - Run status, current node, counters, waiting state, errors, refresh, and cancellation;
-- triage confirmation or correction followed by controlled resume;
-- focused Human Clarification and resume when approved evidence is insufficient;
-- generated Analysis presentation and final Human Review;
-- a persisted Step timeline with nested Tool Calls;
-- controlled Agent state presentation with retrieval queries, chunk text, source URIs, and secret-like fields hidden from the browser.
+- Triage confirmation / correction;
+- Human Clarification;
+- same-Run resume;
+- generated Analysis and final Human Review;
+- persisted Step timeline and nested Tool Calls;
+- controlled Agent state display.
 
-The frontend submits human decisions and renders backend-owned state. It does not infer or persist Agent transitions locally. A dedicated knowledge-administration UI is not implemented.
+The frontend recursively hides retrieval queries, full chunk text, source URIs, credentials, provider endpoints, and secret-like values from Agent state / Tool snapshots rendered in the browser.
+
+The frontend does not own Agent transitions; the backend is authoritative.
 
 ## 11. Provider and Failure Behavior
 
 LLM and embedding configuration are independent.
 
-The analysis workflow records:
+The LLM provider supports an OpenAI-compatible endpoint and records provider/model behavior. Controlled fallback conditions include:
 
-- provider;
-- model name;
-- prompt version;
-- retrieval status;
-- retrieval query;
-- citation snapshot;
-- retrieval error code.
+- missing API key;
+- LLM timeout;
+- HTTP error;
+- request / connection error;
+- invalid JSON;
+- schema validation error;
+- malformed response structure;
+- unexpected provider exception.
 
-Handled outcomes include:
+When these occur, the system can use rule-based fallback rather than silently treating the failed provider call as a successful LLM result.
 
-- successful grounded retrieval;
+The system also distinguishes:
+
 - no retrieval results;
 - retrieval failure;
-- embedding configuration or provider failure;
-- LLM timeout;
-- malformed provider output;
-- rule-based fallback;
-- persistence rollback;
-- duplicate human finalization.
+- embedding configuration/provider failure;
+- Tool timeout/failure;
+- invalid Agent state transition;
+- duplicate finalization;
+- persistence rollback.
 
-Provider failure must not silently appear as a successful LLM result.
+The API includes controlled 404, 409, 422, and 500 outcomes for relevant request/state/persistence cases.
 
 ## 12. Auditability and Trust
 
-Historical citation snapshots are stored with the analysis record and are not rewritten when knowledge documents are later archived or changed.
+The product persists generated output and Grounded Evidence separately.
 
-Retrieved text is untrusted reference data. It does not override system instructions or application contracts.
+A Citation Snapshot is tied to the historical Analysis record and is not rewritten when Knowledge lifecycle state changes.
 
-The public frontend intentionally avoids exposing raw provider secrets and does not display the internal retrieval query or full raw chunk text.
+Retrieved Knowledge Evidence is untrusted reference data and cannot override system/application contracts.
+
+The Agent audit model preserves:
+
+- Run identity and status;
+- ordered Steps;
+- nested Tool Calls;
+- Tool arguments/results after controlled persistence;
+- error codes/messages;
+- Human waiting state;
+- generated Analysis linkage;
+- terminal outcome.
+
+This enables failure analysis at the execution-step level rather than treating every bad result as a generic “prompt problem.”
 
 ## 13. Accepted Evidence Boundary
 
 The portfolio contains accepted evidence for:
 
 - real PostgreSQL and API end-to-end execution;
-- Grounded RAG analysis and citation persistence;
-- human-review transitions;
+- Grounded RAG analysis and Citation Snapshot persistence;
+- `text-embedding-v4` with 1536-dimensional embeddings;
+- Human review transitions;
 - provider fallback and timeout behavior;
 - Agent persistence and lifecycle APIs;
-- bounded resume and investigation execution;
-- guarded tool execution;
-- clarification and final-review waits;
-- analysis persistence;
-- an operator-facing Agent Investigation UI;
-- triage, clarification, and final-review Human Gates;
-- persisted Step and Tool Call timeline rendering;
-- recursive browser redaction for controlled Agent state and Tool snapshots;
-- conservative evidence routing and generation filtering at the accepted demo boundary;
+- bounded investigation and resume;
+- guarded read-only Tool execution;
+- replay-aware Tool-call behavior;
+- Human Clarification and Final Review waits;
+- operator-facing Agent Investigation UI;
+- persisted Step / Tool Call timeline;
+- recursive browser redaction;
+- conservative Agent evidence routing at the accepted demo boundary;
 - normal and recovery cancellation;
-- LangGraph foundation and Runner constructor injection.
+- LangGraph state/topology/adapters/Driver/Coordinator validation;
+- Runner constructor injection boundary.
 
-These demonstrate implementation and engineering acceptance. They do not establish production SLA, business ROI, security certification, or formal model accuracy.
+The accepted Grounded RAG E2E evidence model is `gpt-5.5`; the configurable example default is `gpt-4.1-mini`.
+
+**They do not establish production SLA, business ROI, security certification, or formal model accuracy.**
 
 ## 14. Explicitly Not Implemented
 
 The current product does not include:
 
-- authentication, authorization, or RBAC;
-- user administration;
-- comments or activity feeds;
-- a report/export module;
-- a project-detail route;
-- a dedicated knowledge-management frontend;
-- free-form Agent tool registration or autonomous write actions;
+- Authentication, authorization, or RBAC;
+- user administration or multi-tenant organization isolation;
 - public cloud deployment;
 - CI/CD;
 - distributed task workers;
-- production observability or alerting;
-- formal benchmark datasets;
-- multi-agent behavior.
-
-Legacy mock AI endpoints remain for simple demonstrations, but they are not the persisted Grounded RAG workflow.
+- production-scale load testing;
+- production observability / alerting platform;
+- formal benchmark datasets and calibrated model accuracy;
+- a dedicated Knowledge-management frontend;
+- arbitrary Tool registration;
+- autonomous enterprise write actions;
+- multi-agent behavior;
+- Agent long-term memory;
+- full production Runner takeover by LangGraph;
+- persistent production Checkpointer deployment;
+- automatic database/checkpoint reconciliation.
 
 ## 15. Release Position
 
-Delivery Copilot is a local, evidence-driven portfolio implementation.
+Delivery Copilot is a local, evidence-driven engineering portfolio system.
 
-The honest public claim is:
+The accurate public claim is:
 
-> Delivery Copilot implements an enterprise delivery workflow with persisted Grounded RAG analysis, citation snapshots, human review, evaluation metrics, and a bounded single-agent investigation MVP, together with a validated LangGraph orchestration foundation that has not replaced the production Runner.
+> Delivery Copilot implements an enterprise delivery workflow with persisted Grounded RAG analysis, Citation Snapshots, Human review, and a bounded stateful single-agent investigation runtime with auditable Run / Step / Tool Call state. It also includes a validated LangGraph orchestration foundation and migration seam, but LangGraph has not replaced the current `AgentRunnerService` execution path.
 
-The accepted Agent MVP is operator-visible through the Agent Investigation UI. It remains a local portfolio demonstration, not a production-grade autonomous Agent platform.
+The system is materially beyond a clickable UI prototype because it exercises real persistence, retrieval, external-provider failure behavior, state transitions, concurrency protection, interruption/resume, Tool audit, and Docker runtime dependencies. It is still a portfolio implementation rather than a production enterprise SaaS deployment.

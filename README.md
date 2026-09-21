@@ -1,9 +1,8 @@
 # Delivery Copilot
 
-AI-powered enterprise delivery and issue management platform with grounded RAG, a stateful Agent MVP, a validated LangGraph orchestration foundation, human review, and auditable evidence.
+AI-powered enterprise delivery and issue management platform with persisted Grounded RAG, a bounded stateful Agent workflow, Human-in-the-loop review, auditable evidence, and a validated LangGraph migration foundation.
 
-Delivery Copilot is a portfolio project for Forward Deployed Engineers, Solutions Engineers, Implementation Engineers, Technical Product Managers, and enterprise delivery teams.
-It is not a generic chatbot and not a simple CRUD demo.
+Delivery Copilot is a portfolio implementation for AI Product Manager, Technical Product Manager, Forward Deployed Engineer, Solutions Engineer, and Implementation Engineer roles. It is not a generic chatbot and not a simple CRUD demo.
 
 ![Delivery Copilot completed Agent Investigation](docs/screenshots/agent-investigation-completed.png)
 
@@ -16,17 +15,72 @@ The screenshot shows a completed bounded Agent Run with 18 persisted Steps, 3 ap
 
 </details>
 
-`gpt-5.5` is the model recorded in the accepted E2E evidence. The example configuration in `.env.example` and `compose.yaml` defaults to the configurable `gpt-4.1-mini`; operators can select another compatible model through environment configuration.
+`gpt-5.5` is the accepted E2E evidence model recorded in the portfolio acceptance evidence. The example configuration in `.env.example` and `compose.yaml` defaults to the configurable `gpt-4.1-mini`; operators can select another compatible model through environment configuration.
 
 ## Business Problem
-Enterprise delivery teams often work with customer, project, requirement, and issue information that is spread across multiple systems.
-That fragmentation makes blockers and risk escalation slower than they should be.
-Issue analysis and customer updates still depend on manual synthesis.
-AI outputs are only useful when they include sources, auditability, and a human review step.
+
+Enterprise delivery teams often work with customer, project, requirement, issue, and troubleshooting knowledge that is fragmented across systems and people. That fragmentation makes investigation, blocker escalation, customer updates, and knowledge reuse slower and less auditable than they should be.
+
+Delivery Copilot addresses that workflow with two complementary AI paths:
+
+1. a persisted Grounded RAG issue-analysis path for evidence-backed structured analysis; and
+2. a bounded stateful Agent path for multi-step investigation, tool use, Human Clarification, resume, and final review.
+
+The product treats evidence, state, failure handling, and human control as first-class parts of the workflow rather than assuming that one successful LLM call is enough.
+
+## Current As-built System Architecture
+
+```mermaid
+flowchart LR
+  U[Operator] --> FE[React / TypeScript Frontend]
+  FE --> API[FastAPI API]
+
+  API --> BIZ[Customer / Project / Requirement / Issue Services]
+  BIZ --> PG[(PostgreSQL)]
+
+  API --> RAG[Persisted Grounded RAG Path]
+  RAG --> RET[Query Builder + Embedding + pgvector Top-K]
+  RET --> EVID[Scoped Knowledge Evidence]
+  EVID --> LLM[LLM Provider]
+  LLM -. provider failure .-> RBF[Rule-based Fallback]
+  LLM --> ANALYSIS[Six-field Structured Analysis]
+  RBF --> ANALYSIS
+  ANALYSIS --> SNAP[Citation Snapshot + AIAnalysisLog]
+  SNAP --> REVIEW[Human Review]
+
+  API --> RUNNER[AgentRunnerService]
+  RUNNER --> ORCH[Agent Orchestration / Persistence Services]
+  ORCH --> AR[(AgentRun / AgentStep / AgentToolCall)]
+  RUNNER --> TRIAGE[Triage + Human Gate]
+  TRIAGE --> TOOLS[Bounded Read-only Investigation Tools]
+  TOOLS --> EVAL[Evidence Evaluation]
+  EVAL -->|insufficient| CLARIFY[Human Clarification]
+  CLARIFY --> TOOLS
+  EVAL -->|sufficient / bounded completion| GEN[Structured Analysis Generation]
+  GEN --> SNAP
+  REVIEW --> COMPLETE[Completed Auditable Agent Run]
+
+  RUNNER -. constructor injection / migration seam only .-> COORD[AgentGraphStepCoordinator]
+  COORD --> DRIVER[Single-step Driver]
+  DRIVER --> GRAPH[Compiled LangGraph StateGraph]
+  GRAPH --> NODES[Typed State / Nodes / Routing / Adapters]
+
+  PG --> RET
+  PG --> ORCH
+```
+
+### Architecture truth boundary
+
+The current runtime Agent is **not** driven by LangGraph. `AgentRunnerService`, together with orchestration and persistence services, remains the production business execution authority for the local portfolio runtime.
+
+The repository also contains a validated LangGraph foundation: typed state, graph topology, nodes, routing, read-only and `execute_tool` adapters, a single-step Driver, checkpoint identity classification, and `AgentGraphStepCoordinator`. The Coordinator is constructor-injected into `AgentRunnerService`, but the production Runner does not yet call the Coordinator.
+
+Persistent production Checkpointer deployment, DB/Checkpoint reconciliation, and full orchestration takeover remain outside the implemented portfolio scope.
 
 ## What Is Implemented
 
-### Product workflow
+### Enterprise workflow
+
 - Customer management
 - Project delivery tracking
 - Requirement management
@@ -34,11 +88,12 @@ AI outputs are only useful when they include sources, auditability, and a human 
 - Dynamic dashboard metrics
 - AI Issue Summarizer
 - Analysis History
+- AI evaluation metrics based on Human Review outcomes
 - Human-in-the-loop feedback: `accepted` / `rejected` / `edited_and_accepted`
-- Operator-facing Agent Investigation UI with triage, clarification, final
-  review, cancellation, and persisted execution timeline
+- Operator-facing Agent Investigation UI with triage, clarification, final review, cancellation, and persisted execution timeline
 
 ### Grounded RAG
+
 - Manual knowledge ingestion
 - Knowledge document and chunk persistence
 - Real `text-embedding-v4` integration
@@ -47,7 +102,8 @@ AI outputs are only useful when they include sources, auditability, and a human 
 - Top-K cosine retrieval
 - global / customer / project scope resolution
 - retrieval status persistence
-- citation snapshot persistence
+- Citation Snapshot persistence
+- archived documents excluded from new retrieval while historical snapshots remain immutable
 - prompt injection boundary for untrusted evidence
 - grounded prompt version `issue_summarizer_v4_grounded`
 - frontend citation display
@@ -56,40 +112,53 @@ AI outputs are only useful when they include sources, auditability, and a human 
 
 ![Grounded RAG Analysis #68](docs/screenshots/analysis-68-grounded-rag.png)
 
-The screenshot shows Analysis #68 using `gpt-5.5` with `Grounded with Knowledge`, one business-facing citation, Document #3, and the API Authentication Troubleshooting Guide / Enterprise API Integration Runbook evidence trail.
+Analysis #68 records `gpt-5.5`, `Grounded with Knowledge`, one business-facing citation, Document #3, and the API Authentication Troubleshooting Guide / Enterprise API Integration Runbook evidence trail.
 
-### Agent MVP and LangGraph orchestration foundation
-- Persisted `AgentRun`, `AgentStep`, and `AgentToolCall` audit records
-- Controlled single-agent workflow for triage, human confirmation, tool selection, evidence evaluation, clarification, analysis persistence, and final review
-- Three approved read-only investigation tools with guarded execution and replay-aware result reuse
-- Bounded execution with finite step/tool-call limits, timeout, cancellation, safe failure, and resume behavior
-- Conservative Agent evidence guardrail (`0.65` similarity in the accepted
-  demo baseline): below-threshold chunks remain auditable but are excluded from
-  generation prompts and Citation Snapshots
-- Focused Human Clarification when the approved read-only Tool budget is
-  exhausted without sufficient evidence
-- Operator UI for Run control, Human Gates, generated Analysis, and persisted
-  Step / ToolCall inspection with sensitive state fields redacted
-- Validated LangGraph typed state, compiled topology, nodes, routing, adapters, single-step Driver, checkpoint identity classification, and the `AgentGraphStepCoordinator` foundation
-- Constructor injection of the Coordinator into `AgentRunnerService` without changing existing production Runner behavior
-- Explicit boundary: the production Runner does not yet call the Coordinator; persistent production Checkpointer, DB/Checkpoint reconciliation, and full orchestration takeover remain roadmap items
+### Stateful Agent runtime
 
-### AI provider behavior
-- real LLM provider
-- OpenAI-compatible provider abstraction
-- accepted E2E evidence model: `gpt-5.5`
-- configurable example default model: `gpt-4.1-mini`
-- rule-based fallback
-- provider and model observability
-- structured six-field JSON output
+The implemented Agent runtime persists execution instead of treating the Agent as one opaque request.
 
-### Persistence and runtime
-- PostgreSQL
-- pgvector
-- SQLAlchemy
-- Alembic
-- Docker Compose
-- legacy SQLite compatibility where actually retained
+```text
+Issue
+→ deterministic context load
+→ triage suggestion
+→ Human Triage Confirmation
+→ bounded investigation
+→ approved Tool selection / execution
+→ evidence evaluation
+→ optional Human Clarification
+→ structured Analysis generation
+→ AIAnalysisLog persistence
+→ Final Human Review
+→ completed auditable Run
+```
+
+Implemented runtime capabilities include:
+
+- persisted `AgentRun`, `AgentStep`, and `AgentToolCall` audit records;
+- active-run reuse for the same Issue under a database lock;
+- bounded execution with finite step and Tool-call limits;
+- loop-stall detection and state/node consistency checks;
+- same-Run resume from persisted Human Gates;
+- cancellation and recovery cancellation;
+- replay-aware Tool-call result reuse;
+- row-lock-based state protection for critical persistence transitions;
+- controlled error outcomes rather than silently restarting a Run;
+- browser redaction of retrieval query, chunk text, source URI, credentials, and secret-like state.
+
+### Approved investigation tools
+
+The current dynamic Agent Tool Registry contains exactly three approved read-only tools:
+
+- `search_knowledge`
+- `get_analysis_history`
+- `calculate_delivery_risk`
+
+Issue context loading is a deterministic Runner/service step before dynamic investigation. It is not a fourth dynamically selected Tool in the current registry.
+
+### Agent evidence guardrail
+
+The accepted Agent demo uses a conservative `0.65` similarity boundary. Below-threshold chunks remain in the immutable Tool audit trail but are excluded from generation prompts and Citation Snapshots. This is an accepted demo baseline, not a universal production threshold.
 
 ## Grounded RAG Architecture
 
@@ -111,7 +180,38 @@ flowchart TD
   I -. immutable history .-> J
 ```
 
+## Runtime Failure and Consistency Behavior
+
+This repository intentionally includes failure-path behavior that a visual prototype would not exercise.
+
+### LLM/provider failure
+
+The OpenAI-compatible LLM provider degrades to a rule-based fallback for controlled failure categories including:
+
+- missing API key;
+- timeout;
+- HTTP error;
+- request / connection error;
+- invalid JSON;
+- schema validation error;
+- unexpected response structure;
+- unexpected provider exception.
+
+Provider and model metadata remain observable so fallback output is not silently presented as a successful LLM result.
+
+### API and Agent state behavior
+
+The API distinguishes missing resources, invalid state transitions, and persistence failures rather than flattening them into one generic error. Agent creation locks the Issue row before checking for an active Run so concurrent requests can reuse the current active Run instead of intentionally creating duplicate workflows.
+
+The implementation includes controlled 404, 409, and 500 paths, transaction rollback, Tool timeout/failure states, cancellation, `limit_exceeded`, and explicit waiting states for human input.
+
+### Docker runtime
+
+`compose.yaml` runs PostgreSQL with pgvector and a healthcheck. The backend waits for a healthy database, applies Alembic migrations, and then starts FastAPI. LLM and embedding providers are independently configurable through environment variables.
+
 ## Verified End-to-End Evidence
+
+### Grounded RAG acceptance
 
 | Evidence | Verified result |
 | --- | --- |
@@ -127,21 +227,16 @@ flowchart TD
 | Human review status | pending |
 | Vector dimensions | 1536 |
 
-Analysis #67 is the pre-archive acceptance record, while Analysis #68 is the cleaned-up portfolio record.
-Smoke Test Document #4 was archived after acceptance.
-Historical Citation Snapshots were not rewritten.
+Analysis #67 is the pre-archive acceptance record, while Analysis #68 is the cleaned-up portfolio record. Smoke Test Document #4 was archived after acceptance. Historical Citation Snapshots were not rewritten.
 
-This Grounded RAG acceptance is separate from the Agent Demo acceptance. The
-Agent workflow applies its own conservative `0.65` evidence guardrail; the
-historical #68 record is not rewritten.
+This Grounded RAG acceptance is separate from the Agent Demo acceptance. The historical #68 record is not rewritten by the Agent `0.65` evidence guardrail.
 
 - [Grounded RAG acceptance report](docs/grounded-rag-acceptance.md)
 - [Analysis #67 evidence snapshot](docs/evidence/grounded-rag-analysis-67.json)
 
-## Agent Demo Runtime Acceptance
+### Agent Demo runtime acceptance
 
-The operator-facing Agent workflow was exercised locally against the real
-Docker Compose backend on 2026-08-10.
+The operator-facing Agent workflow was exercised locally against the real Docker Compose backend on 2026-08-10.
 
 | Scenario | Verified result |
 | --- | --- |
@@ -154,69 +249,76 @@ Docker Compose backend on 2026-08-10.
 | Cancellation | normal waiting cancellation and failed-Step recovery cancellation |
 | UI security boundary | retrieval query, chunk text, source URI, and secret-like values redacted |
 
-The accepted runtime path is documented in the
-[Agent Demo acceptance report](docs/agent/agent-demo-acceptance.md).
+The accepted runtime path is documented in the [Agent Demo acceptance report](docs/agent/agent-demo-acceptance.md).
 
 ## Structured AI Output
+
 The AI issue summarizer returns a strict six-field JSON contract:
 
-- issue_summary
-- possible_root_cause
-- recommended_actions
-- customer_update_draft
-- risk_level
-- project_impact
+- `issue_summary`
+- `possible_root_cause`
+- `recommended_actions`
+- `customer_update_draft`
+- `risk_level`
+- `project_impact`
 
-The structured output is validated with Pydantic / JSON contract checks and then routed into human review.
+The structured output is validated with Pydantic / JSON contract checks and then routed into Human Review.
 
 ## Technology Stack
 
 ### Frontend
+
 - React
 - TypeScript
 - Vite
 - CSS
 
 ### Backend
+
 - Python
 - FastAPI
 - SQLAlchemy
 - Pydantic
 
 ### AI and retrieval
+
 - OpenAI-compatible LLM provider
 - accepted E2E evidence model: `gpt-5.5`
+- configurable example default model: `gpt-4.1-mini`
 - example default in `.env.example` and `compose.yaml`: `gpt-4.1-mini`
 - Alibaba Cloud Model Studio `text-embedding-v4`
 - pgvector cosine similarity
-- structured prompt and fallback provider architecture
+- structured prompt and rule-based fallback provider architecture
 - LangGraph orchestration foundation with a single-step Driver and checkpoint identity boundary
 
 ### Data and runtime
+
 - PostgreSQL
 - pgvector
 - Alembic
 - Docker Compose
-- SQLite legacy compatibility
+- SQLite legacy compatibility where actually retained
 
 ## Key Engineering Decisions
+
 1. Grounded evidence is persisted separately from generated text.
 2. Historical Citation Snapshots are immutable.
 3. Archived knowledge is excluded from new retrieval without deleting vectors.
-4. Provider failure degrades to rule-based fallback.
+4. Provider failure degrades to rule-based fallback instead of masquerading as LLM success.
 5. Human feedback cannot finalize an analysis twice.
 6. `edited_and_accepted` requires nonblank `edited_output`.
 7. Current Analysis and History use the same frontend evidence renderer.
 8. Retrieval query, chunk text, source URI, and credentials are not exposed in the UI.
-9. Agent persistence and business transactions remain owned by existing services rather than Graph nodes.
-10. LangGraph is introduced through a Driver and Coordinator seam instead of replacing the production Runner in one migration.
-11. Portfolio claims distinguish a validated orchestration foundation from full production takeover.
-12. Below-threshold Agent evidence remains in audit records but is excluded from
-    generation and Citation Snapshots.
-13. Human-review form state resets between Analysis records so a prior decision
-    cannot be carried into a new Run silently.
+9. Agent persistence and business transactions remain owned by orchestration/persistence services rather than Graph nodes.
+10. The production Agent runtime is bounded and persisted before LangGraph takeover is attempted.
+11. LangGraph is introduced through a Driver and Coordinator seam instead of replacing the existing Runner in one migration.
+12. Portfolio claims distinguish a validated orchestration foundation from full production takeover.
+13. Below-threshold Agent evidence remains auditable but is excluded from generation and Citation Snapshots.
+14. Human-review form state resets between Analysis records so a prior decision cannot be carried into a new Run silently.
+15. Dynamic Tool choice is limited to an allowlisted read-only registry; deterministic context loading is not delegated to the model.
 
 ## API Highlights
+
 - `GET /health`
 - `GET /api/dashboard/metrics`
 - `POST /api/knowledge/documents`
@@ -257,6 +359,7 @@ npm run dev
 If `npm.ps1` is blocked by PowerShell execution policy, use `npm.cmd`.
 
 ## Publicly Verifiable Repository Evidence
+
 - [As-built PRD](PRD.md)
 - [As-built architecture](docs/architecture.md)
 - [Grounded RAG acceptance report](docs/grounded-rag-acceptance.md)
@@ -273,18 +376,22 @@ If `npm.ps1` is blocked by PowerShell execution policy, use `npm.cmd`.
 The fresh public repository uses file-based evidence and checked-in validators rather than references to private development tags or commits.
 
 ## Known Limitations
+
 - Authentication and RBAC are not implemented.
 - No public cloud deployment is included.
+- No CI/CD pipeline is included.
 - Grounded RAG has been accepted on one primary real business scenario.
 - The frontend focuses on evidence visibility rather than full design-system polish.
 - A dedicated Grounded RAG evaluation dashboard is not yet implemented.
 - Runtime demo records are local database state and require seeded or recreated data.
-- The Agent similarity guardrail is a conservative demo baseline and requires a
-  representative evaluation set before production calibration.
+- The Agent similarity guardrail is a conservative demo baseline and requires a representative evaluation set before production calibration.
+- The Agent Investigation UI is an operator-facing local demo, not a production operations console.
+- The architecture has not been load-tested for production-scale concurrency.
 - The validated LangGraph foundation has not taken over the production Runner execution path.
 - A persistent production Checkpointer and automated DB/Checkpoint reconciliation are not included in this portfolio scope.
 
 ## Portfolio Relevance
-This project demonstrates product thinking, enterprise workflow design, API and data modeling, AI provider abstraction, retrieval architecture, stateful Agent orchestration, incremental LangGraph migration boundaries, failure handling, human review, evidence-led validation, and cross-functional communication.
 
-It is well suited for AI Product Manager, Technical Product Manager, Forward Deployed Engineer, AI Solutions Engineer, and Implementation Engineer roles.
+This project demonstrates enterprise workflow design, AI product scoping, Grounded RAG, structured output, evidence persistence, Human-in-the-loop review, bounded stateful Agent orchestration, failure handling, concurrency-safe state transitions, replay-aware tool execution, incremental framework migration, and evidence-led validation.
+
+The strongest portfolio claim is not “a LangGraph Agent.” It is that a fixed evidence-backed AI workflow was extended into a persisted, auditable, bounded Agent runtime while keeping human control and introducing LangGraph only as a validated migration seam rather than replacing a stable execution path for technology-showcase reasons.

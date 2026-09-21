@@ -2,73 +2,94 @@
 
 ## 1. Document Status
 
-- Status: Historical Scope Freeze with Current As-built Overlay
+- Status: Current As-built Scope with Historical Design Notes
 - Public source of truth: checked-out source, migrations, evidence documents, and validators
 - Runtime LangGraph dependency: `langgraph==1.2.10`
-- Current implementation boundary: validated foundation with no production Runner takeover
+- Current runtime authority: `AgentRunnerService` + orchestration/persistence services
+- LangGraph status: validated migration foundation; no production Runner takeover
 
-This document preserves the original Sprint 3A-0 scope as a historical design contract and adds the current as-built status. Sections that describe a frozen target are retained to explain design intent; the as-built statements in this section and Sections 12-13 describe what the repository can honestly claim now.
+This document replaces the previous “historical scope freeze with overlay” presentation with a clearer current-state-first view. Historical design terms are retained only where they explain how the implementation evolved.
 
-The current repository implements the controlled single-agent workflow, Agent persistence, tool selection and guarded execution, bounded continuation, Human Clarification, analysis persistence, final review, and resume behavior. It also contains a runtime-tested LangGraph orchestration foundation with typed state, graph topology, adapters, a single-step Driver, checkpoint identity classification, a Coordinator foundation, and Runner constructor injection.
+The current repository implements a persisted, bounded single-agent Issue investigation workflow with Human Gates, three approved dynamic read-only Tools, evidence evaluation, clarification, resume, structured Analysis generation, final Human Review, and a complete Run / Step / ToolCall audit trail.
 
-The production Runner remains the owner of the existing business execution path. Full production takeover by LangGraph, a persistent production Checkpointer, automated DB/Checkpoint reconciliation, and multi-agent collaboration are outside this portfolio scope.
+The repository also includes a validated LangGraph foundation with typed state, graph topology, adapters, single-step Driver, checkpoint identity classification, `AgentGraphStepCoordinator`, and constructor injection into `AgentRunnerService`. The current Runner stores the Coordinator but does not invoke it.
 
 ## 2. MVP Objective
 
-The Agent MVP upgrades the existing fixed Grounded RAG pipeline into a controlled, stateful, and auditable single-agent issue investigation workflow.
+The Agent MVP extends the accepted fixed Grounded RAG issue-analysis flow into a controlled, stateful, auditable investigation workflow.
 
-The MVP must demonstrate that an agent can:
+The MVP demonstrates that the system can:
 
-1. triage an Issue;
-2. select among approved read-only tools;
-3. use tool results to decide the next step;
-4. evaluate whether evidence is sufficient;
-5. request human clarification when evidence is insufficient;
-6. generate the existing six-field grounded analysis when evidence is sufficient;
-7. persist the Agent Run, Steps, and Tool Calls;
-8. continue into the existing Human Review workflow.
+1. load the selected Issue context deterministically;
+2. generate a validated triage suggestion;
+3. pause for Human Triage Confirmation;
+4. select among approved read-only investigation Tools;
+5. persist each Tool call and result;
+6. evaluate whether the collected evidence is sufficient;
+7. request Human Clarification when required information is missing;
+8. resume the same persisted Run;
+9. generate the existing six-field structured Analysis;
+10. persist the Analysis and wait for final Human Review;
+11. preserve an auditable execution timeline through completion, cancellation, failure, or limit exhaustion.
 
-The MVP extends the existing product. It does not replace or rewrite the accepted Grounded RAG v1.0 implementation.
+The MVP is not a general-purpose autonomous Agent platform.
 
-## 3. Primary Acceptance Scenario
+## 3. Primary Accepted Scenario
 
-The first and only required MVP scenario is:
+The accepted runtime scenario is an enterprise API-authentication / API-timeout investigation flow exercised locally against the real Docker Compose backend.
 
-**Issue #17 - API Authentication Investigation Agent**
+The accepted clarification-path evidence includes:
 
-The scenario concerns an enterprise API authentication failure and uses the existing Delivery Copilot business context and knowledge evidence.
+- Triage Human Gate and same-Run resume;
+- 3 approved read-only Tool calls;
+- a knowledge chunk scored at approximately `0.6089` rejected by the Agent `0.65` guardrail;
+- a focused Human Clarification question;
+- final generation with `Retrieval: no_results` when no usable chunk remained;
+- 20 Steps to Final Review;
+- Step 21 for final completion;
+- 0 retries;
+- normal cancellation and failed-Step recovery cancellation;
+- browser redaction of sensitive Agent state and Tool snapshots.
 
-The Agent MVP is not intended to be a general-purpose autonomous agent platform.
+The detailed evidence is in `docs/agent/agent-demo-acceptance.md`.
 
-## 4. Target Workflow
-
-The frozen target workflow was:
+## 4. Current Runtime Workflow
 
 ```text
-START
--> Load Issue
--> AI Triage
--> Triage Confirmation
--> Route
--> Select Tool
--> Execute Tool
--> Evaluate Evidence
-   |- evidence insufficient -> select another tool
-   |- clarification required -> Human Clarification interrupt
-   `- evidence sufficient -> Generate Analysis
--> Persist Analysis
--> Human Review
--> Persist Final Agent State
--> END
+POST Agent Run
+→ lock Issue / reuse active Run if present
+→ create persisted AgentRun
+→ load Issue context
+→ triage
+→ waiting_for_triage_confirmation
+→ human confirm/correct
+→ route investigation
+→ select approved Tool
+→ execute Tool
+→ persist AgentToolCall
+→ evaluate evidence
+   ├─ another useful Tool → select Tool again
+   ├─ insufficient + human information needed → waiting_for_clarification
+   └─ ready for analysis → generate Analysis
+→ persist AIAnalysisLog
+→ waiting_for_final_review
+→ Human Review
+→ completed
 ```
 
-The final graph must contain real conditional routing. It must not be implemented as a fixed sequence disguised as an agent.
+The backend owns the state machine. The frontend only submits human input and renders persisted state.
 
 ## 5. In-Scope Capabilities
 
-### 5.1 AI Triage
+### 5.1 Deterministic context loading
 
-The Agent will generate a triage suggestion containing:
+Issue context is a mandatory precondition. The Runner uses `AgentIssueContextService` to load the business context before dynamic investigation.
+
+Historical design documents used the name `load_issue_context` as a Tool concept. In the current implementation it is **not** part of the dynamic approved Tool Registry.
+
+### 5.2 AI triage
+
+The triage contract contains:
 
 - `issue_type`
 - `subtype`
@@ -76,59 +97,61 @@ The Agent will generate a triage suggestion containing:
 - `confidence`
 - `reason`
 
-The suggestion must be validated before use.
+The triage output is validated and treated as a suggestion. It does not silently overwrite user-entered Issue fields.
 
-The Agent must not silently overwrite Issue fields entered or confirmed by a user.
+### 5.3 Dynamic read-only Tool layer
 
-### 5.2 Read-only Tool Layer
+The current approved dynamic Tool Registry contains exactly three Tools:
 
-The first version contains four approved read-only tools:
+1. `search_knowledge`
+2. `get_analysis_history`
+3. `calculate_delivery_risk`
 
-1. `load_issue_context`
-2. `search_knowledge`
-3. `get_analysis_history`
-4. `calculate_delivery_risk`
-
-`load_issue_context` is a mandatory deterministic starting tool.
-
-After context is loaded, the Agent must be capable of selecting among at least these three tools:
-
-- `search_knowledge`
-- `get_analysis_history`
-- `calculate_delivery_risk`
-
-The Agent is not required to call all three tools during every run.
-
-### 5.3 Dynamic Routing
-
-Tool selection after context loading must not be a completely fixed hard-coded order.
-
-At least one Tool Result must influence the next node or tool choice.
-
-The graph must support at least these outcomes:
-
-- continue investigation;
-- request human clarification;
-- generate grounded analysis;
-- terminate safely after failure or limit exhaustion.
-
-### 5.4 Evidence Sufficiency
-
-The Agent must explicitly evaluate whether collected evidence is sufficient for final analysis.
-
-Evidence sufficiency is an Agent routing decision. It is not the same as model answer accuracy.
-
-Similarity remains a retrieval relevance signal:
+All three are:
 
 ```text
-similarity_score = 1 - cosine_distance
+read_only = true
+requires_approval = false
 ```
 
-Similarity must not be represented as the probability that an analysis is correct.
+Their configured timeout boundaries are stored in the Tool definitions. The Agent may select different Tools based on triage, prior Tool results, clarification state, and remaining execution budget.
 
-### 5.5 Final Analysis
+### 5.4 Guarded Tool execution
 
-The Agent must reuse the existing six-field analysis contract:
+Tool execution is mediated by registry, contract, policy, dispatch, executor, result-state, and replay-aware services rather than arbitrary model-controlled function calls.
+
+The runtime must reject:
+
+- unregistered Tool names;
+- invalid Tool arguments;
+- incompatible Run/Step state;
+- duplicate or conflicting persisted Tool-call identity;
+- execution beyond the Tool-call budget;
+- unsupported write behavior.
+
+### 5.5 Evidence sufficiency
+
+Evidence evaluation is an explicit routing stage.
+
+The accepted demo baseline uses:
+
+```text
+similarity threshold = 0.65
+```
+
+Below-threshold knowledge remains auditable but is excluded from generation and Citation Snapshots.
+
+Similarity is a retrieval relevance signal, not a probability that the final Analysis is correct.
+
+### 5.6 Human Clarification
+
+When approved Tool evidence is exhausted or insufficient, the Agent can persist a focused clarification question and enter `waiting_for_clarification`.
+
+A nonblank human response resumes the same Run instead of creating a new investigation.
+
+### 5.7 Structured Analysis
+
+The Agent reuses the existing six-field contract:
 
 - `issue_summary`
 - `possible_root_cause`
@@ -137,217 +160,185 @@ The Agent must reuse the existing six-field analysis contract:
 - `risk_level`
 - `project_impact`
 
-The MVP must not introduce an incompatible replacement for the accepted structured output.
+The Agent does not introduce an incompatible second Analysis format.
 
-### 5.6 Human Control
+### 5.8 Final Human Review
 
-The MVP includes:
+The generated Analysis is persisted to `AIAnalysisLog` and linked to the Agent Run. Final Review reuses the existing Analysis feedback workflow:
 
-- confirmation of AI triage suggestions;
-- Human Clarification when required information is missing;
-- the existing final Human Review workflow;
-- support for resuming an interrupted Agent Run.
+- `accepted`
+- `rejected`
+- `edited_and_accepted`
 
-The initial four tools are read-only and do not require per-call approval.
+A rejected Analysis still represents a completed, auditable business workflow.
 
-Any future write-capable tool must require explicit Human Approval before execution.
+### 5.9 Auditability and recovery
 
-### 5.7 Auditability and Recovery
+The runtime persists enough state to reconstruct the execution path:
 
-The Agent workflow must persist enough information to support:
+- Run status and current node;
+- ordered Steps;
+- nested Tool Calls;
+- arguments/results;
+- counters and limits;
+- controlled errors;
+- waiting state;
+- clarification state;
+- linked Analysis;
+- final outcome.
 
-- Agent Run status;
-- current node;
-- Step history;
-- Tool Call arguments and results;
-- retries;
-- errors;
-- approval or clarification state;
-- final outcome;
-- interruption and resume.
+This makes the Agent suitable for step-level badcase analysis rather than only final-answer inspection.
 
-## 6. Tool Contract Requirements
+## 6. Persistence Objects
 
-Every Agent tool must define:
-
-- `name`
-- `description`
-- `input_schema`
-- `output_schema`
-- `timeout`
-- `retry_policy`
-- `read_only`
-- `requires_approval`
-
-Tool inputs and outputs must be validated with Pydantic models.
-
-Tool implementations must return controlled, serializable results rather than leaking raw provider objects or database sessions into Agent State.
-
-The first four tools have:
-
-```text
-read_only = true
-requires_approval = false
-```
-
-This does not permit future write tools to bypass approval.
-
-## 7. Architecture Boundary
-
-LangGraph is used only as the Agent orchestration layer.
-
-The frozen architecture boundary was:
-
-```text
-FastAPI Agent API
--> Agent Application Service
--> LangGraph StateGraph
--> Agent Nodes and Tool Registry
--> Existing Delivery Copilot Services
-```
-
-The implementation must reuse existing capabilities where appropriate:
-
-- FastAPI application;
-- SQLAlchemy database access;
-- Issue, Project, and Customer models;
-- context building;
-- knowledge retrieval;
-- LLM provider abstraction;
-- rule-based fallback;
-- six-field structured output;
-- `AIAnalysisLog`;
-- existing Human Review.
-
-The implementation must not place orchestration responsibilities inside:
-
-- FastAPI route handlers;
-- SQLAlchemy models;
-- the LLM Provider;
-- the Knowledge Search Service;
-- individual Tool implementations.
-
-The current `/api/ai/issues/{issue_id}/summarize` Grounded RAG path must remain available and unchanged during the Agent Foundation phase.
-
-## 8. Dependency Boundary
-
-The project runtime baseline is Python `3.11.9` in Docker.
-
-The checked-in backend requirements pin `langgraph==1.2.10`. The dependency is installed in the accepted development runtime and has been exercised by state-contract, topology, adapter, Driver, checkpoint-identity, Coordinator, and Runner-injection validators.
-
-This runtime validation establishes the orchestration foundation only. It does not establish a production Checkpointer deployment, distributed execution, automatic DB/Checkpoint reconciliation, or production Runner takeover.
-
-## 9. Persistence Objects — Historical Plan and Current As-built State
-
-Sprint 3A-0 reserved three persistence concepts:
+The implemented Agent persistence layer uses:
 
 - `agent_runs`
 - `agent_steps`
 - `agent_tool_calls`
 
-They are now implemented as separate SQLAlchemy/Alembic persistence objects with lifecycle constraints, relationships, indexes, JSON state, terminal-consistency rules, and audit records.
+These remain separate from `AIAnalysisLog`.
 
-The Agent tables remain separate from `AIAnalysisLog`. A completed Agent Run may reference the final `AIAnalysisLog` generated by that run.
+Critical state transitions use row locks so the workflow can enforce current-state assumptions before mutation. Tool-call replay logic validates persisted identity and counters before reuse or new reservation.
 
-Detailed current columns, constraints, relationships, and migration coverage are documented in `DATABASE_SCHEMA.md`.
+The public schema is documented in `DATABASE_SCHEMA.md`.
 
-## 10. Safety and Execution Limits
+## 7. Concurrency and Idempotency Boundary
 
-The implementation must have finite, configurable limits for:
+The API locks the selected Issue before deciding whether an active Run already exists. If a current active Run exists, the create endpoint returns that Run instead of intentionally creating a duplicate active workflow.
 
-- `max_steps`
-- `max_tool_calls`
-- `max_retries`
-- node timeout
-- tool timeout
+Resume uses persisted waiting state and validates that exactly one supported human input type is supplied.
 
-Exact default values are not assigned by this scope document. They must be frozen before orchestration implementation.
+Replay-aware Tool execution can reuse a prior successful persisted Tool result when its identity is valid, rather than blindly re-executing the same Tool call.
 
-A Run must terminate safely when a limit is reached.
+The runtime must not silently restart a Run from the beginning when a persisted waiting state exists.
 
-Failures must be persisted without exposing credentials, API keys, provider endpoints, or unnecessary raw internal data.
+## 8. Bounded Execution
 
-## 11. Explicit Non-goals
+The current Runner enforces finite execution through:
+
+- `max_steps`;
+- `max_tool_calls`;
+- bounded transitions per call;
+- Tool timeout;
+- explicit waiting states;
+- terminal states;
+- state/node consistency checks;
+- loop-stall detection.
+
+The accepted clarification scenario uses a frozen default `max_steps=20` for the bounded investigation and `max_tool_calls=3`; final Human Review adds the terminal Step 21 outside that bounded investigation loop.
+
+Limit exhaustion becomes an explicit `limit_exceeded` outcome rather than an infinite loop.
+
+## 9. Failure and Cancellation Boundary
+
+The Agent workflow distinguishes:
+
+- missing resources;
+- invalid state transition;
+- Tool failure/timeout;
+- bounded-loop conflict;
+- cancellation;
+- recovery cancellation after a failed Step;
+- limit exhaustion;
+- persistence failure.
+
+Cancellation must preserve already-persisted audit evidence.
+
+A failed Step must not leave an invalid active ToolCall behind when recovery cancellation is attempted.
+
+## 10. Architecture Boundary
+
+The current runtime architecture is:
+
+```text
+FastAPI Agent API
+→ AgentRunnerService
+→ AgentOrchestrationService / AgentPersistenceService
+→ focused Agent services
+→ approved Tool adapters
+→ existing Delivery Copilot business / RAG services
+→ PostgreSQL
+```
+
+The current production Runner remains responsible for the business state machine.
+
+The LangGraph foundation is connected only through a validated constructor-injection seam:
+
+```text
+AgentRunnerService
+  -. injected but not invoked .-> AgentGraphStepCoordinator
+      → AgentGraphSingleStepDriver
+      → compiled LangGraph
+```
+
+This is an incremental migration boundary, not a claim that LangGraph already owns production execution.
+
+## 11. LangGraph Foundation Scope
+
+Implemented and validated:
+
+- typed Agent state;
+- frozen node names;
+- graph topology;
+- conditional routing;
+- read-only adapters;
+- `execute_tool` adapter;
+- single-step Driver;
+- strict checkpoint config;
+- checkpoint identity classification;
+- `AgentGraphStepCoordinator`;
+- Runner constructor injection.
+
+Not implemented as production runtime:
+
+- full Runner takeover;
+- persistent production Checkpointer;
+- automated DB/Checkpoint reconciliation;
+- distributed graph workers;
+- autonomous multi-agent execution.
+
+## 12. Human and UI Safety Boundary
+
+The Agent Investigation UI is operator-facing and backend-driven.
+
+The browser must not expose controlled sensitive fields such as:
+
+- retrieval query;
+- full chunk text;
+- source URI;
+- credentials;
+- provider endpoints;
+- secret-like state values.
+
+The UI does not own Agent transitions locally.
+
+## 13. Explicit Non-goals
 
 The Agent MVP does not include:
 
-- automatic modification of Issue records;
-- automatic sending of customer messages;
-- write-capable Agent tools;
+- automatic Issue mutation;
+- automatic customer-message sending;
+- write-capable Agent Tools;
+- arbitrary Tool registration;
 - multi-agent collaboration;
 - Agent long-term memory;
-- Slack integration;
-- Jira integration;
-- CRM integration;
-- model fine-tuning;
+- Slack / Jira / CRM integration;
 - authentication or RBAC;
-- multi-tenant organization support;
+- multi-tenant organization isolation;
 - public cloud production deployment;
-- Kubernetes;
-- Redis;
-- Kafka;
-- a complete production observability platform;
-- a general-purpose autonomous agent platform.
+- Kubernetes / Redis / Kafka architecture;
+- production observability platform;
+- production SLA or production-scale concurrency claim.
 
-## 12. MVP Completion Criteria
+## 14. Completion and Portfolio Claim Boundary
 
-The Agent Workflow can be described as implemented only after all of the following are verified:
+The accepted implementation supports a truthful claim of:
 
-- AI automatically proposes Issue classification;
-- AI can select among at least three tools;
-- tool selection is not a completely fixed order;
-- the graph contains at least one conditional branch;
-- a Tool Result affects the next step;
-- Agent Run state is persisted;
-- every executed Step has an audit record;
-- every Tool Call has an audit record;
-- the Agent can fail safely or retry;
-- finite `max_steps` and `max_tool_calls` limits are enforced;
-- at least one node supports Human Clarification or Approval;
-- an interrupted Run can resume;
-- at least one Agent task evaluation case exists;
-- the final result enters the existing Human Review workflow.
+> A persisted, bounded single-agent Issue investigation workflow with deterministic context loading, validated triage, Human Gates, three approved read-only investigation Tools, evidence evaluation, clarification/resume, structured Analysis generation, Human Review, cancellation, and Run / Step / ToolCall auditability.
 
-### As-built Acceptance Status
+It also supports a separate claim of:
 
-The completion criteria above have been exercised through committed validators, PostgreSQL/API acceptance, resume and final-review flows, bounded execution checks, and the final LangGraph constructor-injection post-commit audit.
+> A validated LangGraph orchestration foundation and migration seam with typed state, graph topology, adapters, a single-step Driver, checkpoint identity handling, and a Coordinator injected into the current Runner.
 
-The accepted LangGraph foundation is an incremental migration seam around the existing production Runner, not evidence of production-scale orchestration takeover.
-
-## 13. Portfolio Claim Boundary
-
-The accepted portfolio may claim:
-
-> Implemented and validated a controlled single-agent Issue investigation workflow with persisted Run/Step/ToolCall audit records, guarded read-only tools, bounded resume behavior, Human Clarification, final Human Review, and a LangGraph orchestration foundation.
-
-The LangGraph claim is limited to the verified foundation: typed state, graph topology, adapters, a single-step Driver, checkpoint identity classification, Coordinator foundation, and Runner constructor injection.
-
-It must not claim full LangGraph takeover of the production Runner, deployment of a persistent production Checkpointer, automatic reconciliation of DB/Checkpoint inconsistency, or enterprise Agent Platform status.
-
-Claims must remain limited to the verified single-agent Issue investigation workflow and the accepted local portfolio evidence.
-
-The project must not claim:
-
-- production deployment;
-- production SLA;
-- formal business ROI;
-- formal model accuracy;
-- multi-agent implementation;
-- fully autonomous enterprise actions.
-
-## 14. Scope Change Control
-
-This document is the frozen Sprint 3A-0 MVP boundary.
-
-Any change that adds tools, write actions, integrations, infrastructure, or additional business scenarios must:
-
-1. be proposed explicitly;
-2. state why the current MVP cannot meet the objective without it;
-3. identify architecture and acceptance impact;
-4. update the scope version before implementation.
-
-The Agent State, node definitions, conditional edges, interrupt points, and persistence mapping will be defined separately in:
-
-```text
-docs/agent/agent-state-and-graph.md
-```
+It does **not** support claims of full LangGraph production orchestration, production autonomous Agent infrastructure, production Checkpoint/DB recovery, production RBAC, or production SLA.

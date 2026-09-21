@@ -4,13 +4,13 @@
 
 This document describes the React routes and interactions implemented in the current frontend.
 
-- Status: As-built
-- Baseline commit: `7c3b1a8`
+- Status: As-built documentation refresh
 - Runtime acceptance date: `2026-08-10`
+- Source of truth: current public frontend/backend contracts and accepted runtime evidence
 
 The application is a desktop-oriented portfolio interface using React, TypeScript, Vite, React Router, and a shared sidebar layout.
 
-There is no Login page, authentication flow, Reports page, Project Detail route, or knowledge-administration UI. The implemented Agent lifecycle surface is a bounded operator demo rather than a general autonomous-Agent workspace.
+There is no Login page, authentication flow, Reports page, Project Detail route, or knowledge-administration UI. The implemented Agent lifecycle surface is a bounded operator demo driven by the backend `AgentRunnerService` state machine rather than a general autonomous-Agent workspace. The UI does not imply LangGraph production Runner takeover.
 
 ## 2. Application Shell
 
