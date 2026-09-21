@@ -28,90 +28,54 @@ Delivery Copilot addresses that workflow with two complementary AI paths:
 
 The product treats evidence, state, failure handling, and human control as first-class parts of the workflow rather than assuming that one successful LLM call is enough.
 
-## Current As-built System Architecture
+## Current As-built End-to-End Product Flow
 
-The system has three distinct layers: the enterprise workflow and data layer, two implemented AI execution paths, and a LangGraph migration foundation that is **not** the current Agent runtime authority.
+The diagram below shows the current **Stateful Agent product flow end to end**: from enterprise delivery context, through investigation and evidence gathering, to structured analysis, Human Review, and auditable completion. The shorter direct Grounded RAG analysis path remains implemented and is documented separately below.
 
 ```mermaid
 flowchart TB
-  U[Operator]
+  U[Operator selects Issue]
   FE[React / TypeScript Frontend]
   API[FastAPI API]
-  BIZ[Enterprise Workflow Services]
-  DB[(PostgreSQL + pgvector)]
+  CTX[Load Customer + Project + Requirement + Issue context]
+  RUN[Create or reuse persisted AgentRun]
+  TRIAGE[Generate triage suggestion]
+  HT[Human Triage Confirmation]
+  ROUTE[Route investigation]
+  TOOL[Select approved read-only Tool]
+  EXEC[Execute Tool]
+  EVID[Persist Tool result + evaluate evidence]
+  CLARIFY[Human Clarification]
+  GEN[Grounded structured Analysis generation]
+  OUT[Six-field Analysis]
+  SNAP[Citation Snapshot + AIAnalysisLog]
+  REVIEW[Final Human Review]
+  DECISION[Accepted / Rejected / Edited and Accepted]
+  DONE[Completed AgentRun + Analysis History + Step / ToolCall audit]
 
-  RAG[Grounded RAG Analysis]
-  AGENT[Stateful Agent Runtime]
-  REVIEW[Human Review]
-  HISTORY[Auditable Analysis / Run History]
-  LG[LangGraph Migration Foundation]
-
-  U --> FE
-  FE --> API
-
-  API --> BIZ
-  BIZ --> DB
-
-  API --> RAG
-  API --> AGENT
-
-  RAG --> DB
-  AGENT --> DB
-
-  RAG --> REVIEW
-  AGENT --> REVIEW
-  REVIEW --> HISTORY
-
-  AGENT -. validated migration seam .-> LG
+  U --> FE --> API --> CTX --> RUN --> TRIAGE --> HT --> ROUTE --> TOOL --> EXEC --> EVID
+  EVID -->|more evidence needed| TOOL
+  EVID -->|user input needed| CLARIFY
+  CLARIFY --> TOOL
+  EVID -->|evidence sufficient or bounded completion| GEN
+  GEN --> OUT --> SNAP --> REVIEW --> DECISION --> DONE
 ```
 
-### Stateful Agent execution path
+The approved dynamic Tool Registry contains exactly three read-only investigation tools:
 
-```mermaid
-flowchart TB
-  A[Issue selected]
-  B[Deterministic context load]
-  C[Triage suggestion]
-  D[Human Triage Confirmation]
-  E[Investigation routing]
-  F[Tool selection]
-  G[Guarded read-only Tool execution]
-  H[Evidence evaluation]
-  I[Human Clarification]
-  J[Structured Analysis generation]
-  K[AIAnalysisLog + Citation Snapshot]
-  L[Final Human Review]
-  M[Completed AgentRun]
-
-  A --> B --> C --> D --> E --> F --> G --> H
-  H -->|more evidence| F
-  H -->|needs user input| I
-  I --> F
-  H -->|sufficient / bounded completion| J
-  J --> K --> L --> M
+```text
+search_knowledge      -> Grounded RAG / scoped knowledge evidence
+get_analysis_history  -> prior persisted analyses
+calculate_delivery_risk -> deterministic delivery-risk evidence
 ```
 
-### LangGraph migration seam
-
-```mermaid
-flowchart TB
-  R[AgentRunnerService<br/>current runtime authority]
-  C[AgentGraphStepCoordinator]
-  D[Single-step Driver]
-  G[Compiled LangGraph StateGraph]
-  N[Typed State / Nodes / Routing / Adapters]
-
-  R -. constructor injection only .-> C
-  C --> D --> G --> N
-```
+The full execution is persisted as `AgentRun -> AgentStep -> AgentToolCall`, so an operator can inspect where a Run changed state, which Tool was called, what evidence was available, what Analysis was generated, and how the final Human Review closed the workflow.
 
 ### Architecture truth boundary
 
-The current runtime Agent is **not** driven by LangGraph. `AgentRunnerService`, together with orchestration and persistence services, remains the production business execution authority for the local portfolio runtime.
+`AgentRunnerService`, together with orchestration and persistence services, is the current Agent runtime authority. The repository also contains a validated LangGraph migration foundation consisting of typed state, graph topology, nodes, routing, adapters, the single-step Driver, checkpoint identity handling, and `AgentGraphStepCoordinator`.
 
-The repository also contains a validated LangGraph foundation: typed state, graph topology, nodes, routing, read-only and `execute_tool` adapters, a single-step Driver, checkpoint identity classification, and `AgentGraphStepCoordinator`. The Coordinator is constructor-injected into `AgentRunnerService`, but the production Runner does not yet call the Coordinator.
-
-Persistent production Checkpointer deployment, DB/Checkpoint reconciliation, and full orchestration takeover remain outside the implemented portfolio scope.
+`AgentGraphStepCoordinator` is constructor-injected into `AgentRunnerService`, but the production Runner does not yet call the Coordinator. Persistent production Checkpointer deployment, DB/Checkpoint reconciliation, and full LangGraph orchestration takeover remain outside the implemented portfolio scope.
 
 ## What Is Implemented
 
