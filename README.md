@@ -30,43 +30,79 @@ The product treats evidence, state, failure handling, and human control as first
 
 ## Current As-built System Architecture
 
+The system has three distinct layers: the enterprise workflow and data layer, two implemented AI execution paths, and a LangGraph migration foundation that is **not** the current Agent runtime authority.
+
 ```mermaid
-flowchart LR
-  U[Operator] --> FE[React / TypeScript Frontend]
-  FE --> API[FastAPI API]
+flowchart TB
+  U[Operator]
+  FE[React / TypeScript Frontend]
+  API[FastAPI API]
+  BIZ[Enterprise Workflow Services]
+  DB[(PostgreSQL + pgvector)]
 
-  API --> BIZ[Customer / Project / Requirement / Issue Services]
-  BIZ --> PG[(PostgreSQL)]
+  RAG[Grounded RAG Analysis]
+  AGENT[Stateful Agent Runtime]
+  REVIEW[Human Review]
+  HISTORY[Auditable Analysis / Run History]
+  LG[LangGraph Migration Foundation]
 
-  API --> RAG[Persisted Grounded RAG Path]
-  RAG --> RET[Query Builder + Embedding + pgvector Top-K]
-  RET --> EVID[Scoped Knowledge Evidence]
-  EVID --> LLM[LLM Provider]
-  LLM -. provider failure .-> RBF[Rule-based Fallback]
-  LLM --> ANALYSIS[Six-field Structured Analysis]
-  RBF --> ANALYSIS
-  ANALYSIS --> SNAP[Citation Snapshot + AIAnalysisLog]
-  SNAP --> REVIEW[Human Review]
+  U --> FE
+  FE --> API
 
-  API --> RUNNER[AgentRunnerService]
-  RUNNER --> ORCH[Agent Orchestration / Persistence Services]
-  ORCH --> AR[(AgentRun / AgentStep / AgentToolCall)]
-  RUNNER --> TRIAGE[Triage + Human Gate]
-  TRIAGE --> TOOLS[Bounded Read-only Investigation Tools]
-  TOOLS --> EVAL[Evidence Evaluation]
-  EVAL -->|insufficient| CLARIFY[Human Clarification]
-  CLARIFY --> TOOLS
-  EVAL -->|sufficient / bounded completion| GEN[Structured Analysis Generation]
-  GEN --> SNAP
-  REVIEW --> COMPLETE[Completed Auditable Agent Run]
+  API --> BIZ
+  BIZ --> DB
 
-  RUNNER -. constructor injection / migration seam only .-> COORD[AgentGraphStepCoordinator]
-  COORD --> DRIVER[Single-step Driver]
-  DRIVER --> GRAPH[Compiled LangGraph StateGraph]
-  GRAPH --> NODES[Typed State / Nodes / Routing / Adapters]
+  API --> RAG
+  API --> AGENT
 
-  PG --> RET
-  PG --> ORCH
+  RAG --> DB
+  AGENT --> DB
+
+  RAG --> REVIEW
+  AGENT --> REVIEW
+  REVIEW --> HISTORY
+
+  AGENT -. validated migration seam .-> LG
+```
+
+### Stateful Agent execution path
+
+```mermaid
+flowchart TB
+  A[Issue selected]
+  B[Deterministic context load]
+  C[Triage suggestion]
+  D[Human Triage Confirmation]
+  E[Investigation routing]
+  F[Tool selection]
+  G[Guarded read-only Tool execution]
+  H[Evidence evaluation]
+  I[Human Clarification]
+  J[Structured Analysis generation]
+  K[AIAnalysisLog + Citation Snapshot]
+  L[Final Human Review]
+  M[Completed AgentRun]
+
+  A --> B --> C --> D --> E --> F --> G --> H
+  H -->|more evidence| F
+  H -->|needs user input| I
+  I --> F
+  H -->|sufficient / bounded completion| J
+  J --> K --> L --> M
+```
+
+### LangGraph migration seam
+
+```mermaid
+flowchart TB
+  R[AgentRunnerService<br/>current runtime authority]
+  C[AgentGraphStepCoordinator]
+  D[Single-step Driver]
+  G[Compiled LangGraph StateGraph]
+  N[Typed State / Nodes / Routing / Adapters]
+
+  R -. constructor injection only .-> C
+  C --> D --> G --> N
 ```
 
 ### Architecture truth boundary
